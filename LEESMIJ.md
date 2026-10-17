@@ -1,4 +1,4 @@
-# RoutePratique – webversie 1.0.0
+# RoutePratique – webversie 1.1.0
 
 Franse gesprekspartner voor in de auto. Je spreekt, de app toont je zin, een verbeterde versie en het antwoord, en spreekt het antwoord uit.
 
@@ -7,7 +7,7 @@ Franse gesprekspartner voor in de auto. Je spreekt, de app toont je zin, een ver
 - Android-telefoon met Chrome
 - Een gratis GitHub-account (om de app online te zetten)
 - Een gratis Groq API-sleutel: maak een account op console.groq.com en kies "API Keys" → "Create API Key"
-- Een Franse stem op de telefoon: Instellingen → Systeem → Talen en invoer → Tekst-naar-spraak → Google Spraakservices → installeer "Frans (Frankrijk)"
+- Een Franse stem op de telefoon. Test dit in de app met "Test stem". Hoor je niets, zoek dan in de Instellingen van Android naar "spraak" → Tekst-naar-spraak-uitvoer → tandwiel naast de Google-engine → Spraakgegevens installeren → Français (France).
 
 ## 1. Online zetten via GitHub Pages
 
@@ -57,4 +57,5 @@ Vervang de bestanden in de GitHub-repository. Sluit de app op de telefoon volled
 - Chrome laat bij elke luisterbeurt een kort geluidje horen. Dat is standaardgedrag van Android en kan de app niet uitschakelen.
 - **Nog te testen op de Moto G84:** of Chrome de Bluetooth-microfoon van de auto gebruikt of de microfoon van de telefoon. Werkt de herkenning slecht, leg de telefoon dan dichter bij je of controleer de Bluetooth-instellingen voor "Telefoongesprekken".
 - **Nog te testen:** hoe snel de spraakherkenning stopt na een korte stilte. Bij lange denkpauzes kan je zin halverwege worden afgebroken.
+- Groq stopt geregeld met oudere modellen. Meldt de app dat het model niet meer bestaat, kies dan bij Instellingen een ander taalmodel (zie console.groq.com/docs/models). Standaard: openai/gpt-oss-120b.
 - De gratis limieten van Groq kunnen wijzigen. Bij een limietmelding wacht de app even en probeert opnieuw.

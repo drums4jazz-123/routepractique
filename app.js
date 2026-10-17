@@ -2,11 +2,14 @@
 (function () {
   'use strict';
 
-  const VERSION = '1.0.0';
+  const VERSION = '1.1.0';
   const STORE = { settings: 'rp.settings', level: 'rp.levelState', sessions: 'rp.sessions' };
+  const DEFAULT_MODEL = 'openai/gpt-oss-120b';
+  /* Modellen die Groq heeft stopgezet: automatisch vervangen door het standaardmodel. */
+  const RETIRED_MODELS = ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant', 'qwen/qwen3-32b', 'qwen/qwen3.6-27b', 'meta-llama/llama-4-scout-17b-16e-instruct'];
   const DEFAULTS = {
     apiKey: '',
-    model: 'llama-3.3-70b-versatile',
+    model: DEFAULT_MODEL,
     autoLevel: true,
     voiceURI: '',
     rate: 0.9,
@@ -35,6 +38,10 @@
   }
 
   let settings = Object.assign({}, DEFAULTS, load(STORE.settings, {}));
+  if (!settings.model || RETIRED_MODELS.includes(settings.model)) {
+    settings.model = DEFAULT_MODEL;
+    save(STORE.settings, settings);
+  }
   let levelState = load(STORE.level, null);
   if (!levelState || !RP.LEVELS.includes(levelState.level)) levelState = RP.newLevelState('A2');
   let sessions = load(STORE.sessions, []);
@@ -126,20 +133,27 @@
   async function callGroq(messages, maxTokens) {
     if (!settings.apiKey) throw Object.assign(new Error('Geen API-sleutel ingesteld.'), { fatal: true });
     let lastErr = null;
+    let useJsonMode = true;
+    const isReasoning = /gpt-oss/i.test(settings.model);
     for (let attempt = 0; attempt < 3; attempt++) {
       const ctrl = new AbortController();
       const timer = setTimeout(() => ctrl.abort(), REQUEST_TIMEOUT_MS);
+      const body = { model: settings.model, messages, temperature: 0.7 };
+      if (isReasoning) {
+        /* Redeneermodel: weinig redeneren (snel antwoord), redenering niet terugsturen,
+           en ruimte laten omdat redeneertokens ook meetellen. */
+        body.reasoning_effort = 'low';
+        body.include_reasoning = false;
+        body.max_completion_tokens = Math.max(maxTokens || 0, 1500);
+      } else {
+        body.max_completion_tokens = maxTokens || 400;
+      }
+      if (useJsonMode) body.response_format = { type: 'json_object' };
       try {
         const res = await fetch(GROQ_URL, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + settings.apiKey },
-          body: JSON.stringify({
-            model: settings.model,
-            messages,
-            temperature: 0.7,
-            max_tokens: maxTokens || 350,
-            response_format: { type: 'json_object' }
-          }),
+          body: JSON.stringify(body),
           signal: ctrl.signal
         });
         clearTimeout(timer);
@@ -147,8 +161,16 @@
           throw Object.assign(new Error('API-sleutel ongeldig of geweigerd.'), { fatal: true });
         }
         if (res.status === 404 || res.status === 400) {
-          const body = await res.text();
-          throw Object.assign(new Error('Verzoek geweigerd (' + res.status + '): ' + body.slice(0, 160)), { fatal: true });
+          const text = await res.text();
+          if (/model_not_found|does not exist|decommissioned/i.test(text)) {
+            throw Object.assign(new Error(`Het model "${settings.model}" bestaat niet (meer) bij Groq. Kies bij Instellingen een ander taalmodel, bijvoorbeeld ${DEFAULT_MODEL}.`), { fatal: true });
+          }
+          /* JSON-modus niet ondersteund of JSON-validatie mislukt: opnieuw proberen zonder JSON-modus. */
+          if (useJsonMode && /response_format|json/i.test(text)) {
+            useJsonMode = false;
+            continue;
+          }
+          throw Object.assign(new Error('Verzoek geweigerd (' + res.status + '): ' + text.slice(0, 160)), { fatal: true });
         }
         if (res.status === 429) {
           const ra = parseFloat(res.headers.get('retry-after'));
@@ -163,7 +185,10 @@
         }
         const data = await res.json();
         const content = data && data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content;
-        if (!content) throw new Error('Leeg antwoord van Groq.');
+        if (!content) {
+          lastErr = new Error('Leeg antwoord van Groq.');
+          continue;
+        }
         return content;
       } catch (e) {
         clearTimeout(timer);
@@ -715,7 +740,7 @@
         const raw = await callGroq([
           { role: 'system', content: 'Reply with a JSON object only.' },
           { role: 'user', content: 'Return {"ok": true} as JSON.' }
-        ], 20);
+        ], 50);
         JSON.parse(RP.stripFences(raw));
         settingsMsg('Verbinding met Groq werkt.', 'ok');
       } catch (e) {
