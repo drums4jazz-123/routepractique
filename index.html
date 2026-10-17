@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="nl-BE">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#16202c">
+  <title>RoutePratique</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" href="icons/icon-192.png">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- STARTSCHERM -->
+  <section id="screen-home" class="screen active">
+    <header class="topbar">
+      <h1>RoutePratique</h1>
+      <button class="icon-btn" id="btn-open-settings" aria-label="Instellingen">⚙</button>
+    </header>
+
+    <div class="card level-card">
+      <p class="muted">Huidig niveau</p>
+      <p class="level-big" id="home-level">A2</p>
+      <p class="muted" id="home-level-label">Basis</p>
+    </div>
+
+    <label class="field">
+      <span>Thema</span>
+      <select id="sel-theme"></select>
+    </label>
+
+    <div id="home-warning" class="notice warn hidden"></div>
+
+    <button class="btn primary big" id="btn-start">▶ Start gesprek</button>
+    <button class="btn" id="btn-open-history">Verslagen bekijken</button>
+
+    <div class="stats" id="home-stats"></div>
+  </section>
+
+  <!-- GESPREKSSCHERM -->
+  <section id="screen-talk" class="screen">
+    <header class="topbar">
+      <div>
+        <h1>RoutePratique</h1>
+        <p class="muted small" id="talk-meta">Thema · 0 min</p>
+      </div>
+      <span class="badge" id="talk-level">A2</span>
+    </header>
+
+    <div id="talk-log" class="talk-log" aria-live="polite"></div>
+
+    <footer class="talk-footer">
+      <p class="status" id="talk-status">Klaar</p>
+      <p class="interim" id="talk-interim"></p>
+      <div class="row">
+        <button class="btn big" id="btn-pause">⏸ Pauze</button>
+        <button class="btn big danger" id="btn-stop">⏹ Stop</button>
+      </div>
+    </footer>
+  </section>
+
+  <!-- VERSLAGEN -->
+  <section id="screen-history" class="screen">
+    <header class="topbar">
+      <button class="icon-btn" data-back="home" aria-label="Terug">←</button>
+      <h1>Verslagen</h1>
+      <span></span>
+    </header>
+    <div id="history-list"></div>
+  </section>
+
+  <section id="screen-report" class="screen">
+    <header class="topbar">
+      <button class="icon-btn" data-back="history" aria-label="Terug">←</button>
+      <h1>Verslag</h1>
+      <button class="icon-btn" id="btn-copy-report" aria-label="Kopiëren">⧉</button>
+    </header>
+    <div id="report-body"></div>
+  </section>
+
+  <!-- INSTELLINGEN -->
+  <section id="screen-settings" class="screen">
+    <header class="topbar">
+      <button class="icon-btn" data-back="home" aria-label="Terug">←</button>
+      <h1>Instellingen</h1>
+      <span></span>
+    </header>
+
+    <label class="field">
+      <span>Groq API-sleutel</span>
+      <input type="password" id="set-key" autocomplete="off" placeholder="gsk_...">
+      <small class="muted">Wordt alleen op dit toestel bewaard.</small>
+    </label>
+
+    <label class="field">
+      <span>Taalmodel</span>
+      <input type="text" id="set-model" autocomplete="off">
+    </label>
+
+    <label class="field">
+      <span>Niveau</span>
+      <select id="set-level"></select>
+    </label>
+
+    <label class="field check">
+      <input type="checkbox" id="set-auto">
+      <span>Niveau automatisch aanpassen</span>
+    </label>
+
+    <label class="field">
+      <span>Franse stem</span>
+      <select id="set-voice"></select>
+    </label>
+
+    <label class="field">
+      <span>Spreeksnelheid: <b id="set-rate-out">0.9</b></span>
+      <input type="range" id="set-rate" min="0.6" max="1.2" step="0.05">
+    </label>
+
+    <div class="row">
+      <button class="btn" id="btn-test-voice">Test stem</button>
+      <button class="btn" id="btn-test-api">Test verbinding</button>
+    </div>
+    <p class="notice hidden" id="settings-msg"></p>
+
+    <button class="btn primary" id="btn-save-settings">Opslaan</button>
+    <button class="btn danger small-btn" id="btn-clear-history">Alle verslagen wissen</button>
+    <p class="muted small center" id="app-version"></p>
+  </section>
+
+  <script src="logic.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
