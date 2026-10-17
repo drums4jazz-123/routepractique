@@ -2,7 +2,7 @@
 (function () {
   'use strict';
 
-  const VERSION = '1.2.0';
+  const VERSION = '1.2.1';
   const STORE = { settings: 'rp.settings', level: 'rp.levelState', sessions: 'rp.sessions' };
   const DEFAULT_MODEL = 'openai/gpt-oss-120b';
   /* Modellen die Groq heeft stopgezet: automatisch vervangen door het standaardmodel. */
@@ -209,6 +209,7 @@
   let rec = null;
   let wakeLock = null;
   let metaTimer = null;
+  let pendingReload = false; // nieuwe versie klaar, herladen na het gesprek
 
   function setState(s, msg) {
     state = s;
@@ -693,6 +694,7 @@
     $('btn-open-history').addEventListener('click', () => { renderHistory(); show('history'); });
     document.querySelectorAll('[data-back]').forEach(b => b.addEventListener('click', () => {
       const target = b.dataset.back;
+      if (target === 'home' && pendingReload && !sess) { location.reload(); return; }
       if (target === 'history') renderHistory();
       if (target === 'home') renderHome();
       show(target);
@@ -790,7 +792,19 @@
     bind();
     renderHome();
     if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('sw.js').catch(e => console.warn('Service worker niet geregistreerd', e));
+      /* Controleer bij elke start op een nieuwe versie en herlaad automatisch zodra die klaarstaat
+         (niet tijdens een lopend gesprek). */
+      const hadController = !!navigator.serviceWorker.controller;
+      let reloading = false;
+      navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if (!hadController || reloading) return;
+        if (sess) { pendingReload = true; return; }
+        reloading = true;
+        location.reload();
+      });
+      navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' })
+        .then(reg => reg.update())
+        .catch(e => console.warn('Service worker niet geregistreerd', e));
     }
   }
 

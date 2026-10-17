@@ -1,4 +1,4 @@
-# RoutePratique – webversie 1.2.0
+# RoutePratique – webversie 1.2.1
 
 Franse gesprekspartner voor in de auto. Je spreekt, de app toont je zin, een verbeterde versie en het antwoord, en spreekt het antwoord uit.
 
@@ -52,7 +52,7 @@ Het taalmodel geeft elke beurt een score. Na zes sterke beurten (gemiddeld 80 % 
 
 ## Updates
 
-Vervang de bestanden in de GitHub-repository. Sluit de app op de telefoon volledig en open ze opnieuw; de nieuwe versie wordt dan geladen.
+Vervang de bestanden in de GitHub-repository (Add file › Upload files, of rechtstreeks via https://github.com/<gebruikersnaam>/routepratique/upload/main). Controleer op github.com dat app.js het nieuwe versienummer bevat en wacht tot de publicatie klaar is (tabblad Actions, groen vinkje). Open daarna de app op de telefoon: vanaf versie 1.2.1 haalt ze de nieuwe versie automatisch op en herlaadt ze zichzelf. Het versienummer staat onderaan bij Instellingen.
 
 ## Gekende beperkingen
 
