@@ -115,6 +115,8 @@ input[type=range] { width: 100%; }
 .btn.danger { color: var(--danger); }
 .btn.big { min-height: 64px; font-size: 19px; }
 .btn.small-btn { font-size: 14px; padding: 9px; }
+.reset-box { border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+.reset-title { margin: 0; font-weight: 600; }
 .row { display: flex; gap: 10px; }
 
 .icon-btn {

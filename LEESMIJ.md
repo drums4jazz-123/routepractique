@@ -1,4 +1,4 @@
-# RoutePratique – webversie 1.1.0
+# RoutePratique – webversie 1.2.0
 
 Franse gesprekspartner voor in de auto. Je spreekt, de app toont je zin, een verbeterde versie en het antwoord, en spreekt het antwoord uit.
 
@@ -41,6 +41,10 @@ Bij de eerste start vraagt Chrome toestemming voor de microfoon. Kies "Toestaan"
   - "Pause" – pauzeren
   - "On arrête" of "Stop" – sessie beëindigen, het verslag verschijnt
 - Na de sessie toont het verslag je correcties onder "Om te herhalen" en het volledige gesprek. Met ⧉ kopieer je het als tekst.
+
+## Opnieuw beginnen
+
+Bij Instellingen (⚙) wist de knop **Opnieuw beginnen** alle verslagen, de statistieken en de niveaugeschiedenis. Je start op het niveau dat in het keuzemenu staat. API-sleutel, stem en spreeksnelheid blijven behouden. Met **Alleen verslagen wissen** verwijder je enkel de verslagen.
 
 ## Niveau-aanpassing
 

@@ -2,7 +2,7 @@
 (function () {
   'use strict';
 
-  const VERSION = '1.1.0';
+  const VERSION = '1.2.0';
   const STORE = { settings: 'rp.settings', level: 'rp.levelState', sessions: 'rp.sessions' };
   const DEFAULT_MODEL = 'openai/gpt-oss-120b';
   /* Modellen die Groq heeft stopgezet: automatisch vervangen door het standaardmodel. */
@@ -754,6 +754,19 @@
       save(STORE.sessions, sessions);
       renderHome();
       settingsMsg('Verslagen gewist.', 'ok');
+    });
+
+    $('btn-reset-all').addEventListener('click', () => {
+      const lvl = $('set-level').value;
+      if (!confirm(`Opnieuw beginnen op niveau ${lvl}?\n\nAlle verslagen, statistieken en de niveaugeschiedenis worden definitief gewist. Je instellingen blijven behouden.`)) return;
+      readSettingsForm();
+      save(STORE.settings, settings);
+      sessions = [];
+      save(STORE.sessions, sessions);
+      levelState = RP.newLevelState(lvl);
+      save(STORE.level, levelState);
+      renderHome();
+      settingsMsg(`Alles gewist. Je begint opnieuw op niveau ${levelState.level}.`, 'ok');
     });
 
     document.addEventListener('visibilitychange', () => {
