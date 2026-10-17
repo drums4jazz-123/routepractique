@@ -2,7 +2,7 @@
 (function () {
   'use strict';
 
-  const VERSION = '1.2.1';
+  const VERSION = '1.3.0';
   const STORE = { settings: 'rp.settings', level: 'rp.levelState', sessions: 'rp.sessions' };
   const DEFAULT_MODEL = 'openai/gpt-oss-120b';
   /* Modellen die Groq heeft stopgezet: automatisch vervangen door het standaardmodel. */
@@ -13,6 +13,7 @@
     autoLevel: true,
     voiceURI: '',
     rate: 0.9,
+    pause: 2.5,
     theme: 'vrij'
   };
   const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions';
@@ -61,6 +62,7 @@
     return new Date(ts).toLocaleString('nl-BE', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
   }
   function minutes(ms) { return Math.max(0, Math.round(ms / 60000)); }
+  function fmtPause(v) { return Number(v).toFixed(1).replace('.', ',') + ' s'; }
 
   function show(name) {
     document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
@@ -274,6 +276,7 @@
   }
 
   function stopRecognition() {
+    if (turnState) clearTimeout(turnState.timer);
     if (rec) {
       try { rec.onend = null; rec.onresult = null; rec.onerror = null; rec.abort(); } catch (e) { /* negeren */ }
       rec = null;
@@ -332,33 +335,71 @@
 
   /* ---------- Luisteren ---------- */
 
+  /* Eén luisterbeurt kan uit meerdere herkenningsrondes bestaan: Chrome stopt soms zelf na een stilte.
+     De beurt is pas klaar als de leerder langer zwijgt dan de ingestelde denkpauze. Hoelang de app
+     wacht voordat de leerder begint te spreken, is onbeperkt. */
+  let turnState = null;
+
   function listen(token) {
     if (!sess || token !== loopToken) return;
     stopRecognition();
     setState('listening');
+    turnState = { token, parts: [], current: '', interim: '', lastActivity: 0, done: false, timer: null };
+    startRecognizer(turnState);
+  }
+
+  function turnText(t) {
+    return [...t.parts, t.current, t.interim].filter(Boolean).join(' ').replace(/\s+/g, ' ').trim();
+  }
+
+  function finishTurn(t) {
+    if (t.done || t.token !== loopToken || !sess) return;
+    t.done = true;
+    clearTimeout(t.timer);
+    const text = turnText(t);
+    stopRecognition();
+    $('talk-interim').textContent = '';
+    if (text) handleUtterance(text, t.token);
+    else listen(t.token);
+  }
+
+  function startRecognizer(t) {
+    if (t.done || !sess || t.token !== loopToken) return;
+    const pauseMs = Math.round((settings.pause || DEFAULTS.pause) * 1000);
     const r = new SR();
     rec = r;
     r.lang = 'fr-FR';
     r.interimResults = true;
-    r.continuous = false;
+    r.continuous = true;
     r.maxAlternatives = 1;
-
-    let finalText = '';
     let retryDelay = 250;
     let fatal = false;
 
     r.onresult = e => {
+      /* Volledige lijst van deze ronde opnieuw opbouwen (vermijdt dubbele tekst bij continue herkenning op Android). */
+      const finals = [];
       let interim = '';
-      for (let i = e.resultIndex; i < e.results.length; i++) {
-        const txt = e.results[i][0].transcript;
-        if (e.results[i].isFinal) finalText += txt;
-        else interim += txt;
+      for (let i = 0; i < e.results.length; i++) {
+        const txt = e.results[i][0].transcript.trim();
+        if (!txt) continue;
+        if (e.results[i].isFinal) {
+          const prev = finals[finals.length - 1];
+          if (prev !== txt) finals.push(txt);
+        } else {
+          interim += ' ' + txt;
+        }
       }
-      $('talk-interim').textContent = (finalText + ' ' + interim).trim();
+      t.current = finals.join(' ');
+      t.interim = interim.trim();
+      t.lastActivity = Date.now();
+      $('talk-interim').textContent = turnText(t);
+      clearTimeout(t.timer);
+      t.timer = setTimeout(() => finishTurn(t), pauseMs);
     };
     r.onerror = e => {
       if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
         fatal = true;
+        clearTimeout(t.timer);
         pauseSession('Geen toegang tot de microfoon. Sta dit toe in Chrome.');
       } else if (e.error === 'network') {
         retryDelay = 3000;
@@ -370,16 +411,25 @@
     };
     r.onend = () => {
       if (rec === r) rec = null;
-      if (fatal || !sess || token !== loopToken) return;
-      const text = finalText.trim();
-      $('talk-interim').textContent = '';
-      if (text) handleUtterance(text, token);
-      else setTimeout(() => listen(token), retryDelay);
+      if (fatal || t.done || !sess || t.token !== loopToken) return;
+      /* Wat deze ronde opleverde bewaren en verder luisteren tot de denkpauze om is. */
+      const piece = t.current || t.interim;
+      if (piece) t.parts.push(piece);
+      t.current = '';
+      t.interim = '';
+      if (!t.parts.length) {
+        setTimeout(() => startRecognizer(t), retryDelay);   // nog niets gezegd: blijven wachten
+      } else if (Date.now() - t.lastActivity >= pauseMs) {
+        finishTurn(t);
+      } else {
+        if (state !== 'listening') setState('listening');
+        startRecognizer(t);                                  // timer loopt verder
+      }
     };
     try {
       r.start();
     } catch (e) {
-      setTimeout(() => listen(token), 600);
+      setTimeout(() => startRecognizer(t), 600);
     }
   }
 
@@ -659,6 +709,8 @@
     $('set-auto').checked = settings.autoLevel;
     $('set-rate').value = settings.rate;
     $('set-rate-out').textContent = Number(settings.rate).toFixed(2);
+    $('set-pause').value = settings.pause;
+    $('set-pause-out').textContent = fmtPause(settings.pause);
     const sel = $('set-level');
     sel.innerHTML = '';
     RP.LEVELS.forEach(l => {
@@ -677,6 +729,8 @@
     settings.model = $('set-model').value.trim() || DEFAULTS.model;
     settings.autoLevel = $('set-auto').checked;
     settings.rate = parseFloat($('set-rate').value) || DEFAULTS.rate;
+    const p = parseFloat($('set-pause').value);
+    settings.pause = isFinite(p) ? Math.min(8, Math.max(1, p)) : DEFAULTS.pause;
     const v = $('set-voice').value;
     if (voices.some(x => x.voiceURI === v)) settings.voiceURI = v;
   }
@@ -716,6 +770,7 @@
     });
 
     $('set-rate').addEventListener('input', e => { $('set-rate-out').textContent = Number(e.target.value).toFixed(2); });
+    $('set-pause').addEventListener('input', e => { $('set-pause-out').textContent = fmtPause(e.target.value); });
 
     $('btn-save-settings').addEventListener('click', () => {
       readSettingsForm();

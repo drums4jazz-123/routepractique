@@ -1,4 +1,4 @@
-# RoutePratique – webversie 1.2.1
+# RoutePratique – webversie 1.3.0
 
 Franse gesprekspartner voor in de auto. Je spreekt, de app toont je zin, een verbeterde versie en het antwoord, en spreekt het antwoord uit.
 
@@ -42,6 +42,10 @@ Bij de eerste start vraagt Chrome toestemming voor de microfoon. Kies "Toestaan"
   - "On arrête" of "Stop" – sessie beëindigen, het verslag verschijnt
 - Na de sessie toont het verslag je correcties onder "Om te herhalen" en het volledige gesprek. Met ⧉ kopieer je het als tekst.
 
+## Denkpauze
+
+Bij Instellingen (⚙) stel je met **Denkpauze** in hoelang de app wacht als je stilvalt, voordat ze je antwoord als afgerond beschouwt (1 tot 8 seconden, standaard 2,5). Wil je midden in een zin kunnen nadenken, zet ze dan hoger. Hoelang de app wacht voordat je begint te spreken, is onbeperkt.
+
 ## Opnieuw beginnen
 
 Bij Instellingen (⚙) wist de knop **Opnieuw beginnen** alle verslagen, de statistieken en de niveaugeschiedenis. Je start op het niveau dat in het keuzemenu staat. API-sleutel, stem en spreeksnelheid blijven behouden. Met **Alleen verslagen wissen** verwijder je enkel de verslagen.
@@ -60,6 +64,6 @@ Vervang de bestanden in de GitHub-repository (Add file › Upload files, of rech
 - Verlaat de app het scherm (ander venster, scherm vergrendeld), dan pauzeert ze. Tik op "Hervat".
 - Chrome laat bij elke luisterbeurt een kort geluidje horen. Dat is standaardgedrag van Android en kan de app niet uitschakelen.
 - **Nog te testen op de Moto G84:** of Chrome de Bluetooth-microfoon van de auto gebruikt of de microfoon van de telefoon. Werkt de herkenning slecht, leg de telefoon dan dichter bij je of controleer de Bluetooth-instellingen voor "Telefoongesprekken".
-- **Nog te testen:** hoe snel de spraakherkenning stopt na een korte stilte. Bij lange denkpauzes kan je zin halverwege worden afgebroken.
+- **Nog te testen op de Moto G84:** de denkpauze gebruikt de continue spraakherkenning van Chrome. Op sommige Android-versies herhaalt die soms woorden. De app filtert dat zo goed mogelijk; zie je toch dubbele woorden in "Jouw zin", meld het dan.
 - Groq stopt geregeld met oudere modellen. Meldt de app dat het model niet meer bestaat, kies dan bij Instellingen een ander taalmodel (zie console.groq.com/docs/models). Standaard: openai/gpt-oss-120b.
 - De gratis limieten van Groq kunnen wijzigen. Bij een limietmelding wacht de app even en probeert opnieuw.
