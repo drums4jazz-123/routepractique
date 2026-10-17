@@ -1,4 +1,4 @@
-# RoutePratique – webversie 1.3.0
+# RoutePratique – webversie 1.5.0
 
 Franse gesprekspartner voor in de auto. Je spreekt, de app toont je zin, een verbeterde versie en het antwoord, en spreekt het antwoord uit.
 
@@ -42,6 +42,25 @@ Bij de eerste start vraagt Chrome toestemming voor de microfoon. Kies "Toestaan"
   - "On arrête" of "Stop" – sessie beëindigen, het verslag verschijnt
 - Na de sessie toont het verslag je correcties onder "Om te herhalen" en het volledige gesprek. Met ⧉ kopieer je het als tekst.
 
+## Mannelijke en vrouwelijke stem
+
+Bij Instellingen (⚙) kies je apart een stem voor **de vragen** en voor **de verbetering**: Vrouw of Man. Standaard stelt een vrouwenstem de vragen en zegt een mannenstem de verbetering, zodat je het verschil meteen hoort. Met "Test stem" hoor je beide na elkaar.
+
+Chrome op Android laat een webapp niet kiezen tussen de verschillende Google-stemmen; de app gebruikt de Franse standaardstem van je toestel en bootst het andere geslacht na door de toonhoogte aan te passen. Dat klinkt iets minder natuurlijk dan een echte stem.
+
+- Vul bij **Deze stem klinkt standaard** in wat je hoort bij een normale toonhoogte (Google: standaard vrouwelijk).
+- Wil je een echte mannenstem voor de vragen: kies in Android bij Tekst-naar-spraak-uitvoer › tandwiel › Frans een mannelijke stem, zet "Deze stem klinkt standaard" op Mannelijk en de stem voor de vragen op Man. De vrouwenstem wordt dan nagebootst.
+
+Camille is in het Frans een naam voor zowel mannen als vrouwen. Kies je een mannenstem voor de vragen, dan spreekt Camille ook als man over zichzelf (je suis content, je suis allé).
+
+## Correctie voorlezen
+
+Bij Instellingen (⚙) kies je bij **Correctie voorlezen** wat er gebeurt als je een fout maakt:
+
+- **Verbeterde zin voorlezen** (standaard): Camille zegt eerst "On dit plutôt : …" met de juiste zin en geeft daarna haar antwoord.
+- **Verbeterde zin + uitleg (Nederlands)**: na de verbeterde zin volgt de korte uitleg met een Nederlandse stem. Daarvoor moet een Nederlandse stem geïnstalleerd zijn (Tekst-naar-spraak-uitvoer › Spraakgegevens installeren › Nederlands). Zonder Nederlandse stem wordt de uitleg overgeslagen.
+- **Niet voorlezen**: de verbeterde zin staat alleen op het scherm en in het verslag; Camille verwerkt de juiste vorm dan ongemerkt in haar antwoord.
+
 ## Denkpauze
 
 Bij Instellingen (⚙) stel je met **Denkpauze** in hoelang de app wacht als je stilvalt, voordat ze je antwoord als afgerond beschouwt (1 tot 8 seconden, standaard 2,5). Wil je midden in een zin kunnen nadenken, zet ze dan hoger. Hoelang de app wacht voordat je begint te spreken, is onbeperkt.
@@ -64,6 +83,6 @@ Vervang de bestanden in de GitHub-repository (Add file › Upload files, of rech
 - Verlaat de app het scherm (ander venster, scherm vergrendeld), dan pauzeert ze. Tik op "Hervat".
 - Chrome laat bij elke luisterbeurt een kort geluidje horen. Dat is standaardgedrag van Android en kan de app niet uitschakelen.
 - **Nog te testen op de Moto G84:** of Chrome de Bluetooth-microfoon van de auto gebruikt of de microfoon van de telefoon. Werkt de herkenning slecht, leg de telefoon dan dichter bij je of controleer de Bluetooth-instellingen voor "Telefoongesprekken".
-- **Nog te testen op de Moto G84:** de denkpauze gebruikt de continue spraakherkenning van Chrome. Op sommige Android-versies herhaalt die soms woorden. De app filtert dat zo goed mogelijk; zie je toch dubbele woorden in "Jouw zin", meld het dan.
+- De denkpauze gebruikt de continue spraakherkenning van Chrome. Op Android stuurt die na elk woord de volledige zin tot dan toe door en verbetert ze soms de laatste woorden. Vanaf versie 1.3.1 voegt de app die stukken samen zonder herhalingen. Zie je toch nog herhalingen in "Jouw zin", meld het dan met een voorbeeld uit het verslag.
 - Groq stopt geregeld met oudere modellen. Meldt de app dat het model niet meer bestaat, kies dan bij Instellingen een ander taalmodel (zie console.groq.com/docs/models). Standaard: openai/gpt-oss-120b.
 - De gratis limieten van Groq kunnen wijzigen. Bij een limietmelding wacht de app even en probeert opnieuw.

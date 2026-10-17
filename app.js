@@ -2,7 +2,7 @@
 (function () {
   'use strict';
 
-  const VERSION = '1.3.0';
+  const VERSION = '1.5.0';
   const STORE = { settings: 'rp.settings', level: 'rp.levelState', sessions: 'rp.sessions' };
   const DEFAULT_MODEL = 'openai/gpt-oss-120b';
   /* Modellen die Groq heeft stopgezet: automatisch vervangen door het standaardmodel. */
@@ -14,6 +14,10 @@
     voiceURI: '',
     rate: 0.9,
     pause: 2.5,
+    speakCorrection: 'zin',   // 'uit' | 'zin' | 'uitleg'
+    voiceGenderDevice: 'f',   // hoe de Franse standaardstem van het toestel klinkt
+    genderMain: 'f',          // stem voor vragen en antwoorden
+    genderCorr: 'm',          // stem voor de verbetering
     theme: 'vrij'
   };
   const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions';
@@ -62,6 +66,17 @@
     return new Date(ts).toLocaleString('nl-BE', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
   }
   function minutes(ms) { return Math.max(0, Math.round(ms / 60000)); }
+  function updateCorrHint() {
+    const v = $('set-corr').value;
+    const hints = {
+      zin: 'Bij een fout zegt Camille eerst "On dit plutôt : …" met de juiste zin, en geeft ze daarna haar antwoord.',
+      uitleg: nlVoices.length
+        ? 'Na de verbeterde zin volgt de korte uitleg met een Nederlandse stem, daarna het antwoord.'
+        : 'Geen Nederlandse stem gevonden op dit toestel: alleen de verbeterde zin wordt voorgelezen. Installeer een Nederlandse stem bij Tekst-naar-spraak-uitvoer.',
+      uit: 'De verbeterde zin verschijnt alleen op het scherm en in het verslag.'
+    };
+    $('set-corr-hint').textContent = hints[v] || hints.zin;
+  }
   function fmtPause(v) { return Number(v).toFixed(1).replace('.', ',') + ' s'; }
 
   function show(name) {
@@ -73,9 +88,13 @@
   /* ---------- Stemmen (TTS) ---------- */
 
   let voices = [];
+  let nlVoices = [];
   function loadVoices() {
     if (!hasTTS) return;
-    voices = speechSynthesis.getVoices().filter(v => v.lang && v.lang.toLowerCase().replace('_', '-').startsWith('fr'));
+    const all = speechSynthesis.getVoices();
+    const langOf = v => (v.lang || '').toLowerCase().replace('_', '-');
+    voices = all.filter(v => langOf(v).startsWith('fr'));
+    nlVoices = all.filter(v => langOf(v).startsWith('nl'));
     const sel = $('set-voice');
     sel.innerHTML = '';
     if (!voices.length) {
@@ -94,17 +113,42 @@
       || voices.find(v => v.lang.replace('_', '-') === 'fr-FR')
       || voices[0] || null;
   }
+  function pickNlVoice() {
+    const l = v => v.lang.toLowerCase().replace('_', '-');
+    return nlVoices.find(v => l(v) === 'nl-be') || nlVoices.find(v => l(v) === 'nl-nl') || nlVoices[0] || null;
+  }
 
-  /* Spreekt tekst uit; resolve wanneer klaar. Bewaking via polling omdat onend op Android soms uitblijft. */
-  function speak(text, token) {
+  /* Mannelijk of vrouwelijk via de toonhoogte. Chrome op Android geeft een webapp geen toegang tot
+     de afzonderlijke mannelijke/vrouwelijke stemmen van Google, alleen tot de standaardstem van het toestel.
+     deviceGender: hoe die standaardstem klinkt ('f' of 'm'). */
+  function pitchFor(gender, deviceGender) {
+    const dev = deviceGender || settings.voiceGenderDevice || 'f';
+    if (gender === dev) return 1;
+    return gender === 'm' ? 0.7 : 1.35;
+  }
+
+  /* Spreekt tekst uit; resolve wanneer klaar. Bewaking via polling omdat onend op Android soms uitblijft.
+     lang 'nl' gebruikt een Nederlandse stem (voor de uitleg bij een correctie).
+     role 'main' = vragen en antwoorden, 'corr' = verbetering. */
+  function speak(text, token, lang, role) {
     return new Promise(resolve => {
       if (!hasTTS || !text) return resolve();
       speechSynthesis.cancel();
       const u = new SpeechSynthesisUtterance(text);
-      u.lang = 'fr-FR';
-      const v = pickVoice();
-      if (v) u.voice = v;
-      u.rate = settings.rate;
+      const gender = role === 'corr' ? settings.genderCorr : settings.genderMain;
+      if (lang === 'nl') {
+        const nv = pickNlVoice();
+        u.lang = nv ? nv.lang : 'nl-BE';
+        if (nv) u.voice = nv;
+        u.rate = Math.min(1.1, settings.rate + 0.1);
+        u.pitch = pitchFor(gender, 'f');   // Nederlandse Google-standaardstem is vrouwelijk
+      } else {
+        u.lang = 'fr-FR';
+        const v = pickVoice();
+        if (v) u.voice = v;
+        u.rate = settings.rate;
+        u.pitch = pitchFor(gender);
+      }
 
       let done = false;
       let started = false;
@@ -349,7 +393,7 @@
   }
 
   function turnText(t) {
-    return [...t.parts, t.current, t.interim].filter(Boolean).join(' ').replace(/\s+/g, ' ').trim();
+    return RP.mergeTranscripts([...t.parts, t.current, t.interim]);
   }
 
   function finishTurn(t) {
@@ -378,19 +422,14 @@
     r.onresult = e => {
       /* Volledige lijst van deze ronde opnieuw opbouwen (vermijdt dubbele tekst bij continue herkenning op Android). */
       const finals = [];
-      let interim = '';
+      const interims = [];
       for (let i = 0; i < e.results.length; i++) {
         const txt = e.results[i][0].transcript.trim();
         if (!txt) continue;
-        if (e.results[i].isFinal) {
-          const prev = finals[finals.length - 1];
-          if (prev !== txt) finals.push(txt);
-        } else {
-          interim += ' ' + txt;
-        }
+        (e.results[i].isFinal ? finals : interims).push(txt);
       }
-      t.current = finals.join(' ');
-      t.interim = interim.trim();
+      t.current = RP.mergeTranscripts(finals);
+      t.interim = RP.mergeTranscripts(interims);
       t.lastActivity = Date.now();
       $('talk-interim').textContent = turnText(t);
       clearTimeout(t.timer);
@@ -413,7 +452,7 @@
       if (rec === r) rec = null;
       if (fatal || t.done || !sess || t.token !== loopToken) return;
       /* Wat deze ronde opleverde bewaren en verder luisteren tot de denkpauze om is. */
-      const piece = t.current || t.interim;
+      const piece = RP.mergeTranscripts([t.current, t.interim]);
       if (piece) t.parts.push(piece);
       t.current = '';
       t.interim = '';
@@ -460,7 +499,7 @@
     if (!sess || token !== loopToken) return;
     setState('thinking');
     const isStart = userContent === '[START]';
-    const messages = [{ role: 'system', content: RP.buildSystemPrompt(levelState.level, sess.theme) }]
+    const messages = [{ role: 'system', content: RP.buildSystemPrompt(levelState.level, sess.theme, { correctionSpoken: settings.speakCorrection !== 'uit', persona: settings.genderMain }) }]
       .concat(sess.history.slice(-2 * MAX_HISTORY_TURNS))
       .concat([{ role: 'user', content: userContent }]);
 
@@ -514,6 +553,17 @@
 
     setState('speaking');
     if (announce) await speak(announce, token);
+    if (token !== loopToken) return;
+    /* Correctie hardop: eerst de verbeterde zin (Frans), eventueel de uitleg (Nederlands), dan het antwoord. */
+    if (!isStart && parsed.correctie && settings.speakCorrection !== 'uit') {
+      await speak('On dit plutôt : ' + parsed.correctie, token, 'fr', 'corr');
+      if (token !== loopToken) return;
+      if (settings.speakCorrection === 'uitleg' && parsed.uitleg && pickNlVoice()) {
+        await speak(parsed.uitleg, token, 'nl', 'corr');
+        if (token !== loopToken) return;
+      }
+      await sleep(350);
+    }
     if (token !== loopToken) return;
     await speak(parsed.antwoord, token);
     if (token === loopToken) listen(token);
@@ -709,6 +759,11 @@
     $('set-auto').checked = settings.autoLevel;
     $('set-rate').value = settings.rate;
     $('set-rate-out').textContent = Number(settings.rate).toFixed(2);
+    $('set-gender-device').value = settings.voiceGenderDevice === 'm' ? 'm' : 'f';
+    $('set-gender-main').value = settings.genderMain === 'm' ? 'm' : 'f';
+    $('set-gender-corr').value = settings.genderCorr === 'f' ? 'f' : 'm';
+    $('set-corr').value = ['uit', 'zin', 'uitleg'].includes(settings.speakCorrection) ? settings.speakCorrection : 'zin';
+    updateCorrHint();
     $('set-pause').value = settings.pause;
     $('set-pause-out').textContent = fmtPause(settings.pause);
     const sel = $('set-level');
@@ -729,6 +784,12 @@
     settings.model = $('set-model').value.trim() || DEFAULTS.model;
     settings.autoLevel = $('set-auto').checked;
     settings.rate = parseFloat($('set-rate').value) || DEFAULTS.rate;
+    const g = id => ($(id).value === 'm' ? 'm' : 'f');
+    settings.voiceGenderDevice = g('set-gender-device');
+    settings.genderMain = g('set-gender-main');
+    settings.genderCorr = g('set-gender-corr');
+    const c = $('set-corr').value;
+    settings.speakCorrection = ['uit', 'zin', 'uitleg'].includes(c) ? c : 'zin';
     const p = parseFloat($('set-pause').value);
     settings.pause = isFinite(p) ? Math.min(8, Math.max(1, p)) : DEFAULTS.pause;
     const v = $('set-voice').value;
@@ -771,6 +832,7 @@
 
     $('set-rate').addEventListener('input', e => { $('set-rate-out').textContent = Number(e.target.value).toFixed(2); });
     $('set-pause').addEventListener('input', e => { $('set-pause-out').textContent = fmtPause(e.target.value); });
+    $('set-corr').addEventListener('change', updateCorrHint);
 
     $('btn-save-settings').addEventListener('click', () => {
       readSettingsForm();
@@ -787,7 +849,9 @@
     $('btn-test-voice').addEventListener('click', () => {
       readSettingsForm();
       if (!voices.length) { settingsMsg('Geen Franse stem gevonden op dit toestel.', 'warn'); return; }
-      speak('Bonjour ! Je m\'appelle Camille. On fait un petit tour en français ?');
+      const intro = settings.genderMain === 'm' ? 'Bonjour ! Je suis Camille, ton partenaire de conversation.' : 'Bonjour ! Je suis Camille, ta partenaire de conversation.';
+      speak(intro + ' On fait un petit tour en français ?', undefined, 'fr', 'main')
+        .then(() => speak('On dit plutôt : je suis allé au marché.', undefined, 'fr', 'corr'));
     });
 
     $('btn-test-api').addEventListener('click', async () => {

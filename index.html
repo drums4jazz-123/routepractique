@@ -114,8 +114,45 @@
     </label>
 
     <label class="field">
+      <span>Deze stem klinkt standaard</span>
+      <select id="set-gender-device">
+        <option value="f">Vrouwelijk</option>
+        <option value="m">Mannelijk</option>
+      </select>
+      <small class="muted">Kies wat je hoort bij een normale toonhoogte. De Google-stem is standaard vrouwelijk, tenzij je in de Android-instellingen een mannelijke stem koos.</small>
+    </label>
+
+    <div class="row">
+      <label class="field" style="flex:1">
+        <span>Stem voor de vragen</span>
+        <select id="set-gender-main">
+          <option value="f">Vrouw</option>
+          <option value="m">Man</option>
+        </select>
+      </label>
+      <label class="field" style="flex:1">
+        <span>Stem voor de verbetering</span>
+        <select id="set-gender-corr">
+          <option value="f">Vrouw</option>
+          <option value="m">Man</option>
+        </select>
+      </label>
+    </div>
+    <small class="muted">Een stem van het andere geslacht wordt nagebootst door de toonhoogte aan te passen. Tik op "Test stem" om beide te horen.</small>
+
+    <label class="field">
       <span>Spreeksnelheid: <b id="set-rate-out">0.9</b></span>
       <input type="range" id="set-rate" min="0.6" max="1.2" step="0.05">
+    </label>
+
+    <label class="field">
+      <span>Correctie voorlezen</span>
+      <select id="set-corr">
+        <option value="zin">Verbeterde zin voorlezen</option>
+        <option value="uitleg">Verbeterde zin + uitleg (Nederlands)</option>
+        <option value="uit">Niet voorlezen (alleen op het scherm)</option>
+      </select>
+      <small class="muted" id="set-corr-hint">Bij een fout zegt Camille eerst "On dit plutôt : …" met de juiste zin, en geeft ze daarna haar antwoord.</small>
     </label>
 
     <label class="field">

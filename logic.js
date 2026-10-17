@@ -57,11 +57,16 @@
     return THEMES.find(t => t.id === id) || THEMES[0];
   }
 
-  function buildSystemPrompt(level, themeId) {
+  function buildSystemPrompt(level, themeId, opts) {
+    const spoken = !!(opts && opts.correctionSpoken);
+    const male = !!(opts && opts.persona === 'm');
     const p = LEVEL_PROFILE[level] || LEVEL_PROFILE.A2;
     const t = themeById(themeId);
     return [
       'You are "Camille", a warm, patient French conversation partner for an adult Dutch-speaking (Flemish) learner who practises spoken French while driving a car.',
+      male
+        ? 'Camille is a man here (Camille is a unisex name in French). When you talk about yourself, use masculine forms (je suis content, je suis allé, un partenaire).'
+        : 'Camille is a woman here. When you talk about yourself, use feminine forms (je suis contente, je suis allée, une partenaire).',
       'The learner speaks; their speech is transcribed automatically, so the text has no reliable punctuation or capitals and may contain recognition errors.',
       '',
       `CURRENT LEVEL: ${level} (CEFR).`,
@@ -72,7 +77,9 @@
       'DIDACTIC RULES:',
       '- Speak French only in "antwoord". Never switch to Dutch or English in "antwoord".',
       '- Keep it a real conversation: react to what the learner said, show interest, then ask ONE question. Never ask two questions at once.',
-      '- Correct implicitly: in "antwoord", naturally reuse the correct form of what the learner got wrong (recast). Do not lecture.',
+      spoken
+        ? '- The app reads "correctie" aloud just before "antwoord". So in "antwoord" do NOT repeat or announce the correction; simply react to the content and continue the conversation. Do not lecture.'
+        : '- Correct implicitly: in "antwoord", naturally reuse the correct form of what the learner got wrong (recast). Do not lecture.',
       '- Regularly create situations that make the learner use the grammar of the current level.',
       '- The learner is driving: no lists, no spelling, no numbers to remember, nothing that requires looking at a screen.',
       '- If the learner seems lost, simplify, rephrase, or offer two options to choose from.',
@@ -171,6 +178,39 @@
     return { state: s, change: null };
   }
 
+  /* Voegt stukken spraakherkenning samen zonder herhalingen.
+     Chrome op Android geeft bij continue herkenning vaak cumulatieve resultaten terug
+     ("je suis", "je suis allé", "je suis allé au marché") of stukken die overlappen. */
+  function mergeTranscripts(segments) {
+    let out = [];      // originele woorden
+    let outN = [];     // genormaliseerde woorden
+    const startsWith = (a, b) => b.length <= a.length && b.every((w, i) => a[i] === w);
+    const endsWith = (a, b) => b.length <= a.length && b.every((w, i) => a[a.length - b.length + i] === w);
+    for (const seg of segments) {
+      const words = String(seg || '').trim().split(/\s+/).filter(Boolean);
+      if (!words.length) continue;
+      const wordsN = words.map(w => normalize(w));
+      if (!out.length) { out = words; outN = wordsN; continue; }
+      if (startsWith(wordsN, outN)) { out = words; outN = wordsN; continue; }   // cumulatief: nieuw stuk bevat het vorige
+      if (endsWith(outN, wordsN)) continue;                                     // nieuw stuk zit al aan het einde
+      /* Herziening: Chrome verbetert de laatste woorden ("rentré plus" → "rentré à plus tard").
+         Het nieuwe stuk begint met (bijna) alles wat er al stond: vervangen in plaats van toevoegen. */
+      let cp = 0;
+      while (cp < outN.length && cp < wordsN.length && outN[cp] === wordsN[cp]) cp++;
+      if (cp >= 2 && cp >= outN.length - 3 && wordsN.length >= cp + 1) { out = words; outN = wordsN; continue; }
+      let k = Math.min(outN.length, wordsN.length - 1);
+      for (; k >= 2; k--) {                                                     // overlap van minstens twee woorden
+        if (endsWith(outN, wordsN.slice(0, k))) break;
+      }
+      if (k >= 2) {
+        out = out.concat(words.slice(k)); outN = outN.concat(wordsN.slice(k));
+      } else {
+        out = out.concat(words); outN = outN.concat(wordsN);
+      }
+    }
+    return out.join(' ');
+  }
+
   /* Spraakcommando's: alleen bij korte uitingen, om valse treffers te vermijden. */
   function detectCommand(text) {
     const n = normalize(text);
@@ -185,7 +225,7 @@
 
   const RP = {
     LEVELS, LEVEL_PROFILE, THEMES, themeById, buildSystemPrompt,
-    parseModelReply, normalize, stripFences, newLevelState, adaptLevel, detectCommand, ADAPT
+    parseModelReply, normalize, stripFences, newLevelState, adaptLevel, detectCommand, mergeTranscripts, ADAPT
   };
   root.RP = RP;
   if (typeof module !== 'undefined' && module.exports) module.exports = RP;
