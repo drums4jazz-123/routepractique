@@ -2,7 +2,7 @@
 (function () {
   'use strict';
 
-  const VERSION = '1.7.0';
+  const VERSION = '1.8.0';
   const STORE = { settings: 'rp.settings', level: 'rp.levelState', sessions: 'rp.sessions' };
   const DEFAULT_MODEL = 'openai/gpt-oss-120b';
   /* Modellen die Groq heeft stopgezet: automatisch vervangen door het standaardmodel. */
@@ -16,6 +16,7 @@
     pause: 2.5,
     speakCorrection: 'zin',   // 'uit' | 'zin' | 'uitleg'
     conversationStyle: 'afwisselend', // 'afwisselend' | 'leerder' | 'camille'
+    humor: 'afentoe',         // 'uit' | 'afentoe' | 'veel'
     sttEngine: 'whisper',     // 'whisper' (eigen opname, geen biepjes) | 'chrome'
     whisperModel: 'whisper-large-v3-turbo',
     voiceGenderDevice: 'f',   // hoe de Franse standaardstem van het toestel klinkt
@@ -678,7 +679,7 @@
     setState('thinking');
     const isStart = userContent === '[START]';
     const isMeta = /^\[[A-Z_]+\]$/.test(userContent);   // [START], [JOUW_BEURT], [MIJN_BEURT]: geen beurt van de leerder
-    const messages = [{ role: 'system', content: RP.buildSystemPrompt(levelState.level, sess.theme, { correctionSpoken: settings.speakCorrection !== 'uit', persona: settings.genderMain, style: sess.style }) }]
+    const messages = [{ role: 'system', content: RP.buildSystemPrompt(levelState.level, sess.theme, { correctionSpoken: settings.speakCorrection !== 'uit', persona: settings.genderMain, style: sess.style, humor: settings.humor }) }]
       .concat(sess.history.slice(-2 * MAX_HISTORY_TURNS))
       .concat([{ role: 'user', content: userContent }]);
 
@@ -952,6 +953,7 @@
     $('set-gender-main').value = settings.genderMain === 'm' ? 'm' : 'f';
     $('set-gender-corr').value = settings.genderCorr === 'f' ? 'f' : 'm';
     $('set-stt').value = settings.sttEngine === 'chrome' ? 'chrome' : 'whisper';
+    $('set-humor').value = RP.HUMOR_LEVELS.includes(settings.humor) ? settings.humor : 'afentoe';
     $('set-corr').value = ['uit', 'zin', 'uitleg'].includes(settings.speakCorrection) ? settings.speakCorrection : 'zin';
     updateCorrHint();
     $('set-pause').value = settings.pause;
@@ -979,6 +981,7 @@
     settings.genderMain = g('set-gender-main');
     settings.genderCorr = g('set-gender-corr');
     settings.sttEngine = $('set-stt').value === 'chrome' ? 'chrome' : 'whisper';
+    settings.humor = RP.HUMOR_LEVELS.includes($('set-humor').value) ? $('set-humor').value : 'afentoe';
     whisperBroken = false;
     const c = $('set-corr').value;
     settings.speakCorrection = ['uit', 'zin', 'uitleg'].includes(c) ? c : 'zin';

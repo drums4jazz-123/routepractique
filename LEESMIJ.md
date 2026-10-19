@@ -1,4 +1,4 @@
-# RoutePratique – webversie 1.7.0
+# RoutePratique – webversie 1.8.0
 
 Franse gesprekspartner voor in de auto. Je spreekt, de app toont je zin, een verbeterde versie en het antwoord, en spreekt het antwoord uit.
 
@@ -63,6 +63,10 @@ Op het startscherm kies je bij **Gespreksvorm**:
 - **Camille stelt de vragen**: zoals in de eerste versies.
 
 In elke vorm beantwoordt Camille jouw vragen eerst volledig. Ze heeft een eigen leven in Frankrijk (werk, gezin, hobby's) waarover je haar vragen kunt stellen; ze blijft daarin consequent binnen een gesprek. Ook taalvragen kan je stellen, bijvoorbeeld "Comment on dit 'file' en français ?".
+
+## Humor
+
+Bij Instellingen (⚙) kies je bij **Humor** hoeveel Camille lacht en grapt: **Af en toe** (standaard, ongeveer één beurt op vier), **Veel** (ongeveer om de beurt) of **Uit**. De humor is licht en vriendelijk en past bij je niveau: eenvoudige overdrijving op A1–A2, ook woordspelingen en uitdrukkingen vanaf B1. Camille lacht nooit met je fouten en maakt geen grappen in de correctie. Maak je zelf een grapje, dan speelt ze mee.
 
 ## Mannelijke en vrouwelijke stem
 

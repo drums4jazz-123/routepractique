@@ -82,6 +82,23 @@
       '- React to what the learner said, show interest, then ask ONE question.'
     ]
   };
+  /* Humor: hoeveel en welke soort */
+  const HUMOR_LEVELS = ['uit', 'afentoe', 'veel'];
+  const HUMOR_LABELS = { uit: 'Uit', afentoe: 'Af en toe', veel: 'Veel' };
+  const HUMOR_COMMON = [
+    '- Humor must be light, warm and kind: playful exaggeration, gentle self-mockery, a wink at traffic jams, the weather, French or Belgian everyday quirks (fries, rain, bureaucracy, coffee), or the situation in the car.',
+    '- Adapt the humor to the level. A1-A2: very simple, obvious humor with frequent words (exaggeration, a funny comparison). B1 and higher: also wordplay, idioms and expressions, which are a learning opportunity in themselves.',
+    '- The humor must be understandable without looking at a screen. If a joke relies on an expression, it may be followed by a very short French paraphrase.',
+    '- Never joke about the learner\'s mistakes, accent or abilities. Never put humor in "correctie" or "uitleg". No sarcasm, no irony that could be misunderstood, nothing about politics, religion or appearance.',
+    '- If the learner makes a joke, react to it like a real person ("Ha ha, très drôle !", play along with it).',
+    '- Humor never replaces the conversation: keep the turn short and still react to the content.'
+  ];
+  const HUMOR_RULES = {
+    uit: ['HUMOR: keep a friendly but neutral tone; no deliberate jokes.'],
+    afentoe: ['HUMOR: occasionally, about one turn in four, add a short touch of humor (one sentence at most).'].concat(HUMOR_COMMON),
+    veel: ['HUMOR: you have a playful personality; add a short touch of humor in about every second turn (one sentence at most).'].concat(HUMOR_COMMON)
+  };
+
   const START_RULES = {
     afwisselend: 'When the user message is [START], greet the learner briefly and start the conversation about the theme with one question; correctie, uitleg and score are null.',
     leerder: 'When the user message is [START], greet the learner briefly, say in one sentence something about yourself related to the theme, and invite the learner to ask you questions about it (do not ask a question yourself); correctie, uitleg and score are null.',
@@ -92,6 +109,7 @@
     const spoken = !!(opts && opts.correctionSpoken);
     const male = !!(opts && opts.persona === 'm');
     const style = STYLES.includes(opts && opts.style) ? opts.style : 'afwisselend';
+    const humor = HUMOR_LEVELS.includes(opts && opts.humor) ? opts.humor : 'afentoe';
     const p = LEVEL_PROFILE[level] || LEVEL_PROFILE.A2;
     const t = themeById(themeId);
     return [
@@ -110,6 +128,8 @@
       '- Speak French only in "antwoord". Never switch to Dutch or English in "antwoord".',
       ...STYLE_RULES[style],
       '- Never ask two questions at once.',
+      '',
+      ...HUMOR_RULES[humor],
       '',
       'QUESTIONS FROM THE LEARNER (always, in every conversation style):',
       '- If the learner asks you something (about you, your life, your opinion, the theme, or the French language), answer it properly FIRST, in French at the current level. Never skip it or answer in a few words just to ask your own question.',
@@ -375,7 +395,7 @@
   const RP = {
     LEVELS, LEVEL_PROFILE, THEMES, themeById, buildSystemPrompt,
     parseModelReply, normalize, stripFences, newLevelState, adaptLevel, detectCommand, mergeTranscripts, ADAPT,
-    STYLES, STYLE_LABELS, createVad, encodeWav, cleanTranscript
+    STYLES, STYLE_LABELS, HUMOR_LEVELS, HUMOR_LABELS, createVad, encodeWav, cleanTranscript
   };
   root.RP = RP;
   if (typeof module !== 'undefined' && module.exports) module.exports = RP;
