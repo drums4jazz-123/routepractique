@@ -30,6 +30,12 @@
       <select id="sel-theme"></select>
     </label>
 
+    <label class="field">
+      <span>Gespreksvorm</span>
+      <select id="sel-style"></select>
+      <small class="muted">Wie stelt de vragen? Tijdens de rit wissel je met "À moi de poser les questions" of "À toi de poser les questions".</small>
+    </label>
+
     <div id="home-warning" class="notice warn hidden"></div>
 
     <button class="btn primary big" id="btn-start">▶ Start gesprek</button>
@@ -52,6 +58,7 @@
 
     <footer class="talk-footer">
       <p class="status" id="talk-status">Klaar</p>
+      <div class="meter hidden" id="talk-meter-wrap"><div id="talk-meter"></div></div>
       <p class="interim" id="talk-interim"></p>
       <div class="row">
         <button class="btn big" id="btn-pause">⏸ Pauze</button>
@@ -143,6 +150,15 @@
     <label class="field">
       <span>Spreeksnelheid: <b id="set-rate-out">0.9</b></span>
       <input type="range" id="set-rate" min="0.6" max="1.2" step="0.05">
+    </label>
+
+    <label class="field">
+      <span>Spraakherkenning</span>
+      <select id="set-stt">
+        <option value="whisper">Eigen opname + Whisper (geen biepjes)</option>
+        <option value="chrome">Google in Chrome (met biepjes)</option>
+      </select>
+      <small class="muted">Whisper werkt via je Groq-sleutel. De balk onder "Luistert…" toont of de microfoon je hoort. Werkt de eigen opname niet, dan schakelt de app vanzelf over op Google.</small>
     </label>
 
     <label class="field">

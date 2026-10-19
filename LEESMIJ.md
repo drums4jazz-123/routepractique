@@ -1,4 +1,4 @@
-# RoutePratique – webversie 1.5.0
+# RoutePratique – webversie 1.7.0
 
 Franse gesprekspartner voor in de auto. Je spreekt, de app toont je zin, een verbeterde versie en het antwoord, en spreekt het antwoord uit.
 
@@ -40,7 +40,29 @@ Bij de eerste start vraagt Chrome toestemming voor de microfoon. Kies "Toestaan"
   - "Plus lentement" – trager spreken en herhalen
   - "Pause" – pauzeren
   - "On arrête" of "Stop" – sessie beëindigen, het verslag verschijnt
+  - "À moi de poser les questions" – jij stelt voortaan de vragen
+  - "À toi de poser les questions" – Camille stelt weer de vragen
 - Na de sessie toont het verslag je correcties onder "Om te herhalen" en het volledige gesprek. Met ⧉ kopieer je het als tekst.
+
+## Spraakherkenning zonder biepjes
+
+Standaard neemt de app je stem zelf op en laat ze uitschrijven door Whisper bij Groq (zelfde API-sleutel). Er zijn dan geen biepjes, en de app bepaalt zelf wanneer je zin af is (zie Denkpauze).
+
+- Bij de start vraagt Chrome één keer toegang tot de microfoon: kies Toestaan.
+- De smalle balk onder "Luistert…" toont of de microfoon je hoort; groen = stem herkend.
+- Na je zin verschijnt kort "Verwerkt je zin…" (opsturen en uitschrijven, meestal minder dan een seconde).
+- Volgens de documentatie van Groq kan je ongeveer 8 uur spraak per dag laten uitschrijven; elke zin telt minstens 10 seconden mee.
+- Bij ⚙ › Spraakherkenning kan je terug naar "Google in Chrome" (met biepjes). Lukt de eigen opname niet, dan schakelt de app vanzelf over op Google.
+
+## Gespreksvorm: wie stelt de vragen?
+
+Op het startscherm kies je bij **Gespreksvorm**:
+
+- **Afwisselend** (standaard): Camille stelt niet elke beurt een vraag, vertelt ook zelf iets en nodigt je geregeld uit om haar iets te vragen.
+- **Ik stel de vragen**: jij leidt het gesprek. Camille beantwoordt je vragen uitgebreid en vraagt normaal niets terug. Weet je niet wat te vragen, dan stelt ze een onderwerp voor.
+- **Camille stelt de vragen**: zoals in de eerste versies.
+
+In elke vorm beantwoordt Camille jouw vragen eerst volledig. Ze heeft een eigen leven in Frankrijk (werk, gezin, hobby's) waarover je haar vragen kunt stellen; ze blijft daarin consequent binnen een gesprek. Ook taalvragen kan je stellen, bijvoorbeeld "Comment on dit 'file' en français ?".
 
 ## Mannelijke en vrouwelijke stem
 
@@ -81,7 +103,8 @@ Vervang de bestanden in de GitHub-repository (Add file › Upload files, of rech
 
 - Zonder mobiele data werkt de app niet: zowel de spraakherkenning als het taalmodel lopen via internet.
 - Verlaat de app het scherm (ander venster, scherm vergrendeld), dan pauzeert ze. Tik op "Hervat".
-- Chrome laat bij elke luisterbeurt een kort geluidje horen. Dat is standaardgedrag van Android en kan de app niet uitschakelen.
+- Met "Google in Chrome" laat Android bij elke luisterbeurt een kort geluidje horen; dat kan een webapp niet uitschakelen. Gebruik daarom de standaard "Eigen opname + Whisper".
+- **Nog te testen op de Moto G84:** hoe goed de eigen opname werkt met de microfoon van de auto (Bluetooth) en bij veel rijgeluid. Pikt de balk je stem niet op of ziet hij rijgeluid als spraak, meld het dan.
 - **Nog te testen op de Moto G84:** of Chrome de Bluetooth-microfoon van de auto gebruikt of de microfoon van de telefoon. Werkt de herkenning slecht, leg de telefoon dan dichter bij je of controleer de Bluetooth-instellingen voor "Telefoongesprekken".
 - De denkpauze gebruikt de continue spraakherkenning van Chrome. Op Android stuurt die na elk woord de volledige zin tot dan toe door en verbetert ze soms de laatste woorden. Vanaf versie 1.3.1 voegt de app die stukken samen zonder herhalingen. Zie je toch nog herhalingen in "Jouw zin", meld het dan met een voorbeeld uit het verslag.
 - Groq stopt geregeld met oudere modellen. Meldt de app dat het model niet meer bestaat, kies dan bij Instellingen een ander taalmodel (zie console.groq.com/docs/models). Standaard: openai/gpt-oss-120b.

@@ -202,3 +202,6 @@ input[type=range] { width: 100%; }
 .report-section-title { font-weight: 600; margin: 14px 0 6px; }
 .corr-list li { margin-bottom: 8px; }
 .corr-list .old { text-decoration: line-through; color: var(--muted); }
+.meter { height: 6px; background: var(--surface-2); border-radius: 3px; overflow: hidden; margin: 0 20%; }
+#talk-meter { height: 100%; width: 0; background: var(--muted); transition: width 60ms linear; }
+#talk-meter.voice { background: var(--ok-text); }

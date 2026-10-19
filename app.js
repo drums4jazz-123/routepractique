@@ -2,7 +2,7 @@
 (function () {
   'use strict';
 
-  const VERSION = '1.5.0';
+  const VERSION = '1.7.0';
   const STORE = { settings: 'rp.settings', level: 'rp.levelState', sessions: 'rp.sessions' };
   const DEFAULT_MODEL = 'openai/gpt-oss-120b';
   /* Modellen die Groq heeft stopgezet: automatisch vervangen door het standaardmodel. */
@@ -15,12 +15,16 @@
     rate: 0.9,
     pause: 2.5,
     speakCorrection: 'zin',   // 'uit' | 'zin' | 'uitleg'
+    conversationStyle: 'afwisselend', // 'afwisselend' | 'leerder' | 'camille'
+    sttEngine: 'whisper',     // 'whisper' (eigen opname, geen biepjes) | 'chrome'
+    whisperModel: 'whisper-large-v3-turbo',
     voiceGenderDevice: 'f',   // hoe de Franse standaardstem van het toestel klinkt
     genderMain: 'f',          // stem voor vragen en antwoorden
     genderCorr: 'm',          // stem voor de verbetering
     theme: 'vrij'
   };
   const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions';
+  const WHISPER_URL = 'https://api.groq.com/openai/v1/audio/transcriptions';
   const MAX_HISTORY_TURNS = 10;
   const MAX_SESSIONS = 30;
   const REQUEST_TIMEOUT_MS = 25000;
@@ -285,14 +289,15 @@
   function updateMeta() {
     if (!sess) return;
     const theme = RP.themeById(sess.theme).nl;
-    $('talk-meta').textContent = `${theme} · ${minutes(Date.now() - sess.start)} min`;
+    $('talk-meta').textContent = `${theme} · ${RP.STYLE_LABELS[sess.style] || ''} · ${minutes(Date.now() - sess.start)} min`;
     $('talk-level').textContent = levelState.level;
   }
 
   function startSession() {
-    if (!SR) { alert('Spraakherkenning wordt niet ondersteund. Gebruik Chrome op Android.'); return; }
+    if (!SR && !canWhisper()) { alert('Spraakherkenning wordt niet ondersteund. Gebruik Chrome op Android.'); return; }
     if (!settings.apiKey) { alert('Vul eerst je Groq API-sleutel in bij Instellingen.'); show('settings'); return; }
     settings.theme = $('sel-theme').value;
+    settings.conversationStyle = RP.STYLES.includes($('sel-style').value) ? $('sel-style').value : 'afwisselend';
     save(STORE.settings, settings);
 
     sess = {
@@ -300,6 +305,7 @@
       start: Date.now(),
       end: null,
       theme: settings.theme,
+      style: settings.conversationStyle,
       startLevel: levelState.level,
       endLevel: levelState.level,
       turns: [],
@@ -315,11 +321,14 @@
     requestWakeLock();
     // Eerste spraakuitvoer moet uit een tik komen: kort leeg fragment ontgrendelt TTS op Android.
     if (hasTTS) { const u = new SpeechSynthesisUtterance(' '); u.volume = 0; speechSynthesis.speak(u); }
+    if (useWhisper()) ensureMic().catch(() => {});   // microfoontoestemming meteen bij de start vragen
     loopToken++;
     askModel('[START]', null, loopToken);
   }
 
   function stopRecognition() {
+    vad = null;
+    meter(0, 1);
     if (turnState) clearTimeout(turnState.timer);
     if (rec) {
       try { rec.onend = null; rec.onresult = null; rec.onerror = null; rec.abort(); } catch (e) { /* negeren */ }
@@ -331,6 +340,7 @@
     if (!sess) return;
     loopToken++;
     stopRecognition();
+    releaseMic();
     if (hasTTS) speechSynthesis.cancel();
     $('talk-interim').textContent = '';
     setState('paused', reason || 'Gepauzeerd');
@@ -353,6 +363,7 @@
     if (!sess) return;
     loopToken++;
     stopRecognition();
+    releaseMic();
     if (hasTTS) speechSynthesis.cancel();
     releaseWakeLock();
     clearInterval(metaTimer);
@@ -364,7 +375,7 @@
     if (finished.turns.length) {
       const record = {
         id: finished.id, start: finished.start, end: finished.end, theme: finished.theme,
-        startLevel: finished.startLevel, endLevel: finished.endLevel, turns: finished.turns
+        startLevel: finished.startLevel, endLevel: finished.endLevel, turns: finished.turns, style: finished.style
       };
       sessions.push(record);
       while (sessions.length > MAX_SESSIONS) sessions.shift();
@@ -387,6 +398,163 @@
   function listen(token) {
     if (!sess || token !== loopToken) return;
     stopRecognition();
+    if (useWhisper()) return listenWhisper(token);
+    listenChrome(token);
+  }
+
+  /* ---------- Eigen opname + Whisper (geen biepjes) ---------- */
+
+  let mic = null;            // { ctx, stream, src, proc, sink, rate }
+  let vad = null;            // { token, det }
+  let micPromise = null;
+  let whisperBroken = false; // eigen opname mislukt: rest van de sessie Google gebruiken
+
+  function canWhisper() {
+    return !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia && (window.AudioContext || window.webkitAudioContext));
+  }
+  function useWhisper() {
+    return settings.sttEngine !== 'chrome' && !whisperBroken && canWhisper();
+  }
+
+  function ensureMic() {
+    if (mic) return Promise.resolve(mic);
+    if (micPromise) return micPromise;
+    micPromise = (async () => {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1 }
+      });
+      const AC = window.AudioContext || window.webkitAudioContext;
+      const ctx = new AC();
+      if (ctx.state === 'suspended') { try { await ctx.resume(); } catch (e) { /* negeren */ } }
+      const src = ctx.createMediaStreamSource(stream);
+      const proc = ctx.createScriptProcessor(2048, 1, 1);
+      const sink = ctx.createGain();
+      sink.gain.value = 0;               // niets naar de luidspreker sturen
+      src.connect(proc); proc.connect(sink); sink.connect(ctx.destination);
+      proc.onaudioprocess = e => onAudioFrame(e.inputBuffer.getChannelData(0));
+      mic = { ctx, stream, src, proc, sink, rate: ctx.sampleRate };
+      return mic;
+    })();
+    return micPromise.finally(() => { micPromise = null; });
+  }
+
+  function releaseMic() {
+    vad = null;
+    if (!mic) return;
+    const m = mic; mic = null;
+    try { m.proc.onaudioprocess = null; m.src.disconnect(); m.proc.disconnect(); m.sink.disconnect(); } catch (e) { /* negeren */ }
+    try { m.stream.getTracks().forEach(t => t.stop()); } catch (e) { /* negeren */ }
+    try { m.ctx.close(); } catch (e) { /* negeren */ }
+  }
+
+  function meter(rms, thr) {
+    const bar = $('talk-meter');
+    if (!bar) return;
+    bar.style.width = Math.min(100, Math.round((rms / (thr * 2 || 1)) * 100)) + '%';
+    bar.classList.toggle('voice', rms > thr);
+  }
+
+  function listenWhisper(token) {
+    setState('listening');
+    $('talk-meter-wrap').classList.remove('hidden');
+    ensureMic().then(m => {
+      if (!sess || token !== loopToken) return;
+      vad = { token, rate: m.rate, det: RP.createVad({ sampleRate: m.rate, pauseMs: Math.round((settings.pause || DEFAULTS.pause) * 1000) }) };
+    }).catch(e => {
+      if (!sess || token !== loopToken) return;
+      whisperBroken = true;
+      $('talk-meter-wrap').classList.add('hidden');
+      addSys('Eigen opname niet mogelijk (' + (e.message || e.name || 'microfoon') + '). Overgeschakeld op de Google-spraakherkenning.');
+      if (!SR) { pauseSession('Geen spraakherkenning beschikbaar.'); return; }
+      listenChrome(token);
+    });
+  }
+
+  function onAudioFrame(data) {
+    if (!vad) return;
+    const v = vad;
+    const ev = v.det.push(data);
+    meter(v.det.rms, v.det.threshold);
+    if (!ev) return;
+    if (ev.type === 'speechStart') {
+      setState('listening', '🎙 Je spreekt…');
+    } else if (ev.type === 'discard') {
+      vad = null;
+      listen(v.token);
+    } else if (ev.type === 'end') {
+      vad = null;
+      meter(0, 1);
+      processRecording(ev.samples, v.rate, v.token);
+    }
+  }
+
+  async function processRecording(samples, rate, token) {
+    if (!sess || token !== loopToken) return;
+    setState('thinking', 'Verwerkt je zin…');
+    let text = '';
+    try {
+      text = RP.cleanTranscript(await transcribe(RP.encodeWav(samples, rate, 16000)));
+    } catch (e) {
+      if (!sess || token !== loopToken) return;
+      console.error(e);
+      if (e.fatal) { addSys('Spraakherkenning: ' + e.message); pauseSession(e.message); return; }
+      addSys('Spraakherkenning: ' + e.message);
+      setState('speaking');
+      await speak("Pardon, je n'ai pas bien entendu. Tu peux répéter ?", token);
+    }
+    if (!sess || token !== loopToken) return;
+    if (!text) { listen(token); return; }
+    handleUtterance(text, token);
+  }
+
+  async function transcribe(wavBytes) {
+    if (!settings.apiKey) throw Object.assign(new Error('Geen API-sleutel ingesteld.'), { fatal: true });
+    let lastErr = null;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const fd = new FormData();
+      fd.append('file', new Blob([wavBytes], { type: 'audio/wav' }), 'zin.wav');
+      fd.append('model', settings.whisperModel || DEFAULTS.whisperModel);
+      fd.append('language', 'fr');
+      fd.append('response_format', 'json');
+      fd.append('temperature', '0');
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 20000);
+      try {
+        const res = await fetch(WHISPER_URL, { method: 'POST', headers: { 'Authorization': 'Bearer ' + settings.apiKey }, body: fd, signal: ctrl.signal });
+        clearTimeout(timer);
+        if (res.status === 401 || res.status === 403) throw Object.assign(new Error('API-sleutel ongeldig of geweigerd.'), { fatal: true });
+        if (res.status === 400 || res.status === 404) {
+          const t = await res.text();
+          if (/model_not_found|does not exist|decommissioned/i.test(t)) {
+            throw Object.assign(new Error(`Het spraakmodel "${settings.whisperModel}" bestaat niet (meer) bij Groq. Kies bij Instellingen "Google in Chrome" of meld het.`), { fatal: true });
+          }
+          throw Object.assign(new Error('Spraakherkenning geweigerd (' + res.status + '): ' + t.slice(0, 120)), { fatal: true });
+        }
+        if (res.status === 429) {
+          const ra = parseFloat(res.headers.get('retry-after'));
+          lastErr = new Error('Limiet van Groq bereikt, even wachten.');
+          await sleep(isFinite(ra) ? Math.min(ra, 20) * 1000 : 3000 * (attempt + 1));
+          continue;
+        }
+        if (!res.ok) { lastErr = new Error('Serverfout ' + res.status); await sleep(1200 * (attempt + 1)); continue; }
+        const data = await res.json();
+        return (data && typeof data.text === 'string') ? data.text : '';
+      } catch (e) {
+        clearTimeout(timer);
+        if (e.fatal) throw e;
+        lastErr = e.name === 'AbortError' ? new Error('Geen antwoord binnen de tijd (verbinding?).') : e;
+        if (!navigator.onLine) lastErr = new Error('Geen internetverbinding.');
+        await sleep(1200 * (attempt + 1));
+      }
+    }
+    throw lastErr || new Error('Onbekende fout.');
+  }
+
+  /* ---------- Google-spraakherkenning in Chrome (reserve) ---------- */
+
+  function listenChrome(token) {
+    if (!sess || token !== loopToken) return;
+    $('talk-meter-wrap').classList.add('hidden');
     setState('listening');
     turnState = { token, parts: [], current: '', interim: '', lastActivity: 0, done: false, timer: null };
     startRecognizer(turnState);
@@ -476,6 +644,16 @@
     const cmd = RP.detectCommand(text);
     if (cmd === 'stop') return stopSession();
     if (cmd === 'pause') return pauseSession();
+    if (cmd === 'roleLearner' || cmd === 'roleCamille') {
+      const style = cmd === 'roleLearner' ? 'leerder' : 'camille';
+      sess.style = style;
+      settings.conversationStyle = style;
+      save(STORE.settings, settings);
+      $('sel-style').value = style;
+      updateMeta();
+      addSys('Gespreksvorm: ' + RP.STYLE_LABELS[style]);
+      return askModel(style === 'leerder' ? '[MIJN_BEURT]' : '[JOUW_BEURT]', null, token);
+    }
     if (cmd === 'repeat' || cmd === 'slower') {
       if (cmd === 'slower') {
         settings.rate = Math.max(0.6, Math.round((settings.rate - 0.1) * 100) / 100);
@@ -499,14 +677,15 @@
     if (!sess || token !== loopToken) return;
     setState('thinking');
     const isStart = userContent === '[START]';
-    const messages = [{ role: 'system', content: RP.buildSystemPrompt(levelState.level, sess.theme, { correctionSpoken: settings.speakCorrection !== 'uit', persona: settings.genderMain }) }]
+    const isMeta = /^\[[A-Z_]+\]$/.test(userContent);   // [START], [JOUW_BEURT], [MIJN_BEURT]: geen beurt van de leerder
+    const messages = [{ role: 'system', content: RP.buildSystemPrompt(levelState.level, sess.theme, { correctionSpoken: settings.speakCorrection !== 'uit', persona: settings.genderMain, style: sess.style }) }]
       .concat(sess.history.slice(-2 * MAX_HISTORY_TURNS))
       .concat([{ role: 'user', content: userContent }]);
 
     let parsed;
     try {
       const raw = await callGroq(messages);
-      parsed = RP.parseModelReply(raw, isStart ? null : userContent);
+      parsed = RP.parseModelReply(raw, isMeta ? null : userContent);
     } catch (e) {
       if (!sess || token !== loopToken) return;
       console.error(e);
@@ -527,7 +706,7 @@
     sess.lastReply = parsed.antwoord;
 
     const levelBefore = levelState.level;
-    if (isStart) {
+    if (isMeta) {
       renderAppOnlyTurn(parsed.antwoord);
     } else {
       sess.turns.push({
@@ -538,7 +717,7 @@
     }
 
     let announce = '';
-    if (!isStart && parsed.score !== null) {
+    if (!isMeta && parsed.score !== null) {
       const res = RP.adaptLevel(levelState, parsed.score, settings.autoLevel);
       levelState = res.state;
       save(STORE.level, levelState);
@@ -555,7 +734,7 @@
     if (announce) await speak(announce, token);
     if (token !== loopToken) return;
     /* Correctie hardop: eerst de verbeterde zin (Frans), eventueel de uitleg (Nederlands), dan het antwoord. */
-    if (!isStart && parsed.correctie && settings.speakCorrection !== 'uit') {
+    if (!isMeta && parsed.correctie && settings.speakCorrection !== 'uit') {
       await speak('On dit plutôt : ' + parsed.correctie, token, 'fr', 'corr');
       if (token !== loopToken) return;
       if (settings.speakCorrection === 'uitleg' && parsed.uitleg && pickNlVoice()) {
@@ -642,7 +821,7 @@
     $('home-level-label').textContent = RP.LEVEL_PROFILE[levelState.level].label + (settings.autoLevel ? ' · past zich aan' : ' · vast niveau');
 
     const warn = [];
-    if (!SR) warn.push('Spraakherkenning is niet beschikbaar in deze browser. Gebruik Chrome op Android.');
+    if (!SR && !canWhisper()) warn.push('Spraakherkenning is niet beschikbaar in deze browser. Gebruik Chrome op Android.');
     if (!settings.apiKey) warn.push('Vul eerst je Groq API-sleutel in bij Instellingen (⚙).');
     if (hasTTS && voices.length === 0) warn.push('Nog geen Franse stem gevonden. Controleer de spraakuitvoer van Android (Google Spraakservices, Frans).');
     const w = $('home-warning');
@@ -661,6 +840,16 @@
     });
   }
 
+  function fillStyleSelect() {
+    const sel = $('sel-style');
+    sel.innerHTML = '';
+    RP.STYLES.forEach(st => {
+      const o = el('option', null, RP.STYLE_LABELS[st]);
+      o.value = st;
+      if (st === settings.conversationStyle) o.selected = true;
+      sel.appendChild(o);
+    });
+  }
   function fillThemeSelect() {
     const sel = $('sel-theme');
     sel.innerHTML = '';
@@ -705,7 +894,7 @@
     const scored = s.turns.filter(t => typeof t.score === 'number');
     const avg = scored.length ? Math.round(100 * scored.reduce((a, t) => a + t.score, 0) / scored.length) : null;
     sum.appendChild(el('b', null, fmtDate(s.start)));
-    sum.appendChild(el('span', null, `Thema: ${RP.themeById(s.theme).nl}`));
+    sum.appendChild(el('span', null, `Thema: ${RP.themeById(s.theme).nl}` + (s.style ? ` · ${RP.STYLE_LABELS[s.style]}` : '')));
     sum.appendChild(el('span', null, `Duur: ${minutes(s.end - s.start)} min · ${s.turns.length} beurten`));
     sum.appendChild(el('span', null, `Niveau: ${s.startLevel} → ${s.endLevel}` + (avg !== null ? ` · gemiddelde score ${avg}%` : '')));
     sum.appendChild(el('span', null, `Correcties: ${nCorr}`));
@@ -762,6 +951,7 @@
     $('set-gender-device').value = settings.voiceGenderDevice === 'm' ? 'm' : 'f';
     $('set-gender-main').value = settings.genderMain === 'm' ? 'm' : 'f';
     $('set-gender-corr').value = settings.genderCorr === 'f' ? 'f' : 'm';
+    $('set-stt').value = settings.sttEngine === 'chrome' ? 'chrome' : 'whisper';
     $('set-corr').value = ['uit', 'zin', 'uitleg'].includes(settings.speakCorrection) ? settings.speakCorrection : 'zin';
     updateCorrHint();
     $('set-pause').value = settings.pause;
@@ -788,6 +978,8 @@
     settings.voiceGenderDevice = g('set-gender-device');
     settings.genderMain = g('set-gender-main');
     settings.genderCorr = g('set-gender-corr');
+    settings.sttEngine = $('set-stt').value === 'chrome' ? 'chrome' : 'whisper';
+    whisperBroken = false;
     const c = $('set-corr').value;
     settings.speakCorrection = ['uit', 'zin', 'uitleg'].includes(c) ? c : 'zin';
     const p = parseFloat($('set-pause').value);
@@ -863,7 +1055,12 @@
           { role: 'user', content: 'Return {"ok": true} as JSON.' }
         ], 50);
         JSON.parse(RP.stripFences(raw));
-        settingsMsg('Verbinding met Groq werkt.', 'ok');
+        if (settings.sttEngine !== 'chrome') {
+          await transcribe(RP.encodeWav(new Float32Array(8000), 16000, 16000));   // 0,5 s stilte
+          settingsMsg('Verbinding werkt: taalmodel en spraakherkenning (Whisper).', 'ok');
+        } else {
+          settingsMsg('Verbinding met Groq werkt.', 'ok');
+        }
       } catch (e) {
         settingsMsg('Mislukt: ' + e.message, 'warn');
       }
@@ -908,6 +1105,7 @@
       speechSynthesis.onvoiceschanged = () => { loadVoices(); renderHome(); };
     }
     fillThemeSelect();
+    fillStyleSelect();
     bind();
     renderHome();
     if ('serviceWorker' in navigator) {
