@@ -163,7 +163,7 @@
       '- 0.4: understandable but with clear mistakes or very short / minimal answer.',
       '- 0.1: hardly understandable, wrong language, or no real answer.',
       '',
-      'OUTPUT: reply with ONE JSON object only, no other text:',
+      'OUTPUT: reply with ONE JSON object only, no other text. Your earlier turns in the conversation history are shortened to save space (only "correctie" and "antwoord"); your new reply must ALWAYS contain all fields:',
       '{"correctie": string|null, "uitleg": string|null, "antwoord": string, "vertaling": string|null, "score": number|null, "leerwoorden": [{"fr": string, "nl": string}]}',
       '"leerwoorden": at most 2 French words or short expressions the learner needs to learn from their LAST utterance: a word they did not know (said it in Dutch or English, talked around it, or asked how to say it) or a word they used wrongly (wrong word, false friend, wrong gender of a noun). NOT for grammar or conjugation mistakes. "fr": dictionary form (infinitive for verbs; nouns with definite article, and add (m.) or (f.) after a noun with l\'). "nl": Dutch translation (with de/het for nouns). Use [] when there is nothing to add, and always [] for bracketed messages.',
       translate

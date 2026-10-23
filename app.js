@@ -2,7 +2,7 @@
 (function () {
   'use strict';
 
-  const VERSION = '2.2.1';
+  const VERSION = '2.3.0';
   const STORE = { settings: 'rp.settings', level: 'rp.levelState', sessions: 'rp.sessions', vocab: 'rp.vocab', mywords: 'rp.mywords', examples: 'rp.examples' };
   const DEFAULT_MODEL = 'openai/gpt-oss-120b';
   /* Modellen die Groq heeft stopgezet: automatisch vervangen door het standaardmodel. */
@@ -35,7 +35,7 @@
   };
   const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions';
   const WHISPER_URL = 'https://api.groq.com/openai/v1/audio/transcriptions';
-  const MAX_HISTORY_TURNS = 10;
+  const MAX_HISTORY_TURNS = 6;   // minder tokens per aanvraag (limieten van Groq)
   const MAX_SESSIONS = 30;
   const REQUEST_TIMEOUT_MS = 25000;
 
@@ -207,6 +207,54 @@
 
   /* ---------- Groq ---------- */
 
+  /* Limiet bereikt (429): Groq zegt in de foutmelding welke limiet, bv. "... on tokens per day (TPD):
+     Limit 200000, Used 199500, Requested 1200. Please try again in 7m12.5s."
+     Daglimiet: niet blijven proberen, maar melden wanneer het weer kan. Minuut- of uurlimiet: even wachten. */
+  function parseWaitText(t) {
+    const m = /try again in\s+((?:\d+(?:\.\d+)?\s*(?:ms|h|m|s)\s*)+)/i.exec(t || '');
+    if (!m) return null;
+    let ms = 0;
+    for (const p of m[1].matchAll(/(\d+(?:\.\d+)?)\s*(ms|h|m|s)/gi)) {
+      const n = parseFloat(p[1]), u = p[2].toLowerCase();
+      ms += u === 'h' ? n * 3600000 : u === 'm' ? n * 60000 : u === 's' ? n * 1000 : n;
+    }
+    return ms || null;
+  }
+  function clockIn(ms) {
+    const d = new Date(Date.now() + ms);
+    return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+  }
+  function durationNl(ms) {
+    const min = Math.ceil(ms / 60000);
+    if (min < 60) return min + ' min';
+    const h = Math.floor(min / 60), r = min % 60;
+    return h + ' u' + (r ? ' ' + r + ' min' : '');
+  }
+  async function rateLimitInfo(res, what) {
+    let text = '';
+    try { text = await res.text(); } catch (e) { /* negeren */ }
+    const ra = parseFloat(res.headers.get('retry-after'));
+    const waitText = parseWaitText(text);
+    const waitMs = isFinite(ra) ? ra * 1000 : waitText;
+    const daily = /per day|\((?:TPD|RPD|ASD)\)/i.test(text);
+    const hourly = /per hour|\(ASH\)/i.test(text);
+    if (daily || (waitMs && waitMs > 60000)) {
+      const when = waitMs ? ' Je kunt weer verder rond ' + clockIn(waitMs) + ' (over ' + durationNl(waitMs) + ').' : ' Probeer het later opnieuw.';
+      const kind = daily ? 'Daglimiet' : hourly ? 'Uurlimiet' : 'Limiet';
+      return { fatal: true, error: Object.assign(new Error(kind + ' van Groq bereikt (' + what + ').' + when), { fatal: true, rateLimit: true }) };
+    }
+    return {
+      fatal: false,
+      waitMs: waitMs ? Math.min(Math.max(waitMs, 500), 20000) : null,
+      error: new Error('Minuutlimiet van Groq bereikt (' + what + '). Wacht even en probeer opnieuw.')
+    };
+  }
+  function limitStatus(lim) {
+    if (!sess) return;
+    const s = lim.waitMs ? Math.ceil(lim.waitMs / 1000) : 3;
+    setState('thinking', 'Minuutlimiet van Groq: ' + s + ' s wachten…');
+  }
+
   /* tries: aantal pogingen (extra aanvragen zoals voorbeeldzin en synoniemcontrole: 1, zodat niets blijft hangen). */
   async function callGroq(messages, maxTokens, tries) {
     if (!settings.apiKey) throw Object.assign(new Error('Geen API-sleutel ingesteld.'), { fatal: true });
@@ -224,7 +272,8 @@
            en ruimte laten omdat redeneertokens ook meetellen. */
         body.reasoning_effort = 'low';
         body.include_reasoning = false;
-        body.max_completion_tokens = Math.max(maxTokens || 0, 1500);
+        // Gesprek: 1500. Kleine aanvragen (voorbeeldzin, synoniem, test): gevraagde ruimte + 300 om te redeneren.
+        body.max_completion_tokens = maxTokens ? maxTokens + 300 : 1500;
       } else {
         body.max_completion_tokens = maxTokens || 400;
       }
@@ -254,9 +303,11 @@
           throw Object.assign(new Error('Verzoek geweigerd (' + res.status + '): ' + text.slice(0, 160)), { fatal: true });
         }
         if (res.status === 429) {
-          const ra = parseFloat(res.headers.get('retry-after'));
-          lastErr = new Error('Limiet van Groq bereikt, even wachten.');
-          await wait(attempt, isFinite(ra) ? Math.min(ra, 20) * 1000 : 3000 * (attempt + 1));
+          const lim = await rateLimitInfo(res, 'taalmodel');
+          if (lim.fatal) throw lim.error;
+          lastErr = lim.error;
+          if (attempt < tries - 1) limitStatus(lim);
+          await wait(attempt, lim.waitMs ?? 3000 * (attempt + 1));
           continue;
         }
         if (!res.ok) {
@@ -626,9 +677,10 @@
           throw Object.assign(new Error('Spraakherkenning geweigerd (' + res.status + '): ' + t.slice(0, 120)), { fatal: true });
         }
         if (res.status === 429) {
-          const ra = parseFloat(res.headers.get('retry-after'));
-          lastErr = new Error('Limiet van Groq bereikt, even wachten.');
-          await sleep(isFinite(ra) ? Math.min(ra, 20) * 1000 : 3000 * (attempt + 1));
+          const lim = await rateLimitInfo(res, 'spraakherkenning');
+          if (lim.fatal) throw lim.error;
+          lastErr = lim.error;
+          if (attempt < 2) { limitStatus(lim); await sleep(lim.waitMs ?? 3000 * (attempt + 1)); }
           continue;
         }
         if (!res.ok) { lastErr = new Error('Serverfout ' + res.status); if (attempt < 2) await sleep(1200 * (attempt + 1)); continue; }
@@ -799,7 +851,8 @@
     if (!sess || token !== loopToken) return;
 
     sess.history.push({ role: 'user', content: userContent });
-    sess.history.push({ role: 'assistant', content: JSON.stringify({ correctie: parsed.correctie, uitleg: parsed.uitleg, antwoord: parsed.antwoord, vertaling: parsed.vertaling, score: parsed.score, leerwoorden: parsed.leerwoorden }) });
+    /* Ingekort in de geschiedenis: vertaling, uitleg, score en leerwoorden hoeft het model niet terug te lezen. */
+    sess.history.push({ role: 'assistant', content: JSON.stringify({ correctie: parsed.correctie, antwoord: parsed.antwoord }) });
     sess.lastReply = parsed.antwoord;
 
     const levelBefore = levelState.level;

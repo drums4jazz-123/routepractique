@@ -1,4 +1,4 @@
-# RoutePratique – webversie 2.2.1
+# RoutePratique – webversie 2.3.0
 
 Franse gesprekspartner om Frans te spreken, thuis, onderweg of in de auto. Je spreekt, de app toont je zin, een verbeterde versie en het antwoord met de Nederlandse vertaling, en spreekt het antwoord uit. Daarnaast is er een woordentraining in beide richtingen.
 
@@ -155,4 +155,7 @@ Vervang de bestanden in de GitHub-repository (Add file › Upload files, of rech
 - In een gesprek luistert de app in het Frans. Zeg je tussendoor een Nederlands woord, dan wordt dat soms als een Frans klinkend woord uitgeschreven. Vraag het liever in het Frans ("Comment on dit … ?").
 - In de woordentraining wacht de app na een los woord hoogstens 1,5 seconde stilte (ook als je denkpauze langer staat), zodat de training vlot blijft.
 - Groq stopt geregeld met oudere modellen. Meldt de app dat het model niet meer bestaat, kies dan bij Instellingen een ander taalmodel (zie console.groq.com/docs/models). Standaard: openai/gpt-oss-120b.
-- De gratis limieten van Groq kunnen wijzigen. Bij een limietmelding wacht de app even en probeert opnieuw.
+- **Limieten van Groq (gratis abonnement).** Het taalmodel mag 8.000 tokens per minuut en 200.000 tokens per dag gebruiken; die limieten kunnen wijzigen (zie console.groq.com/settings/limits). Om zuinig te zijn stuurt de app alleen de laatste 6 beurten mee, en daarvan alleen de correctie en Camilles antwoord. Een gespreksbeurt kost zo ongeveer 3.000 tokens: genoeg voor een zestigtal beurten per dag.
+  - **Minuutlimiet:** de app toont "Minuutlimiet van Groq: … s wachten" en probeert daarna vanzelf opnieuw.
+  - **Daglimiet:** de app pauzeert en meldt rond welk uur je weer verder kunt. Alles wat je die dag met je sleutel doet telt mee, ook de woordentraining en "Test verbinding".
+  - [ONZEKER – nog te testen: of voorbeeldzinnen en synoniemcontrole met de kleinere uitvoerruimte altijd een antwoord geven. Ontbreekt de voorbeeldzin geregeld, meld het dan.]
