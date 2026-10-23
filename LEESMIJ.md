@@ -1,4 +1,4 @@
-# RoutePratique – webversie 2.1.1
+# RoutePratique – webversie 2.1.2
 
 Franse gesprekspartner om Frans te spreken, thuis, onderweg of in de auto. Je spreekt, de app toont je zin, een verbeterde versie en het antwoord met de Nederlandse vertaling, en spreekt het antwoord uit. Daarnaast is er een woordentraining in beide richtingen.
 
@@ -90,7 +90,9 @@ Standaard neemt de app je stem zelf op en laat ze uitschrijven door Whisper bij 
 - Na je zin verschijnt kort "Verwerkt je zin…" (opsturen en uitschrijven, meestal minder dan een seconde).
 - Volgens de documentatie van Groq kan je ongeveer 8 uur spraak per dag laten uitschrijven; elke zin telt minstens 10 seconden mee.
 - Bij ⚙ › Spraakherkenning kan je terug naar "Google in Chrome" (met biepjes). Lukt de eigen opname niet, dan schakelt de app vanzelf over op Google.
-- **Volume.** Een open microfoon zet Android in "gespreksmodus": de stem klinkt dan zachter (en via Bluetooth via het telefoonprofiel). Daarom gaat de microfoon dicht zolang Camille spreekt en weer open als ze luistert (instelling **Microfoon sluiten terwijl Camille spreekt**, standaard aan). Klinkt Camille toch nog stil, druk dan op de volumeknop terwijl ze spreekt.
+- **Volume.** Een open microfoon zet Android in "gespreksmodus": de stem klinkt dan zachter (en via Bluetooth via het telefoonprofiel). Daarom gaat de microfoon dicht zolang Camille spreekt en weer open als ze luistert (instelling **Microfoon terwijl Camille spreekt**, standaard "Sluiten"). Klinkt Camille toch nog stil, druk dan op de volumeknop terwijl ze spreekt.
+- **Bluetooth-koptelefoon of auto.** Bluetooth gebruikt twee profielen: een telefoonprofiel (microfoon aan, lagere kwaliteit) en een muziekprofiel (alleen geluid, normale kwaliteit). Omschakelen duurt 1 à 2 seconden; wat Camille in die tijd zegt, hoor je niet. Daarom sluit de app de microfoon zodra je stopt met spreken en wacht Camille daarna nog de **Bluetooth-wachttijd** (standaard 1,5 s, instelbaar van 0 tot 3 s). Valt het begin van haar zinnen nog weg, zet de wachttijd hoger. Zonder Bluetooth mag ze op 0.
+- **Open laten.** Bij **Microfoon terwijl Camille spreekt** kun je ook "Open laten" kiezen: dan is er geen omschakeling en geen wachttijd, maar klinkt Camille mogelijk zachter. [ONZEKER – nog te testen op de Moto G84: of het volume met "Open laten" normaal blijft nu de echo-onderdrukking uit staat.]
 
 ## Gespreksvorm: wie stelt de vragen?
 

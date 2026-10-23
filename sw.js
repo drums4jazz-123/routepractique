@@ -1,5 +1,5 @@
 /* RoutePratique – service worker: bewaart de app-bestanden, laat API-verkeer ongemoeid */
-const CACHE = 'routepratique-v2.1.1';
+const CACHE = 'routepratique-v2.1.2';
 const ASSETS = [
   './',
   './index.html',

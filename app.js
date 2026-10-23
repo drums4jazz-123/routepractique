@@ -2,7 +2,7 @@
 (function () {
   'use strict';
 
-  const VERSION = '2.1.1';
+  const VERSION = '2.1.2';
   const STORE = { settings: 'rp.settings', level: 'rp.levelState', sessions: 'rp.sessions', vocab: 'rp.vocab', mywords: 'rp.mywords', examples: 'rp.examples' };
   const DEFAULT_MODEL = 'openai/gpt-oss-120b';
   /* Modellen die Groq heeft stopgezet: automatisch vervangen door het standaardmodel. */
@@ -27,7 +27,8 @@
     vocabExamples: true,      // voorbeeldzin na elk woord
     collectWords: true,       // woorden uit gesprekken toevoegen aan de woordentraining
     sttEngine: 'whisper',     // 'whisper' (eigen opname, geen biepjes) | 'chrome'
-    micOffWhileSpeaking: true, // microfoon dicht terwijl Camille spreekt (normaal volume)
+    micWhileSpeaking: 'close', // 'close' = microfoon dicht terwijl Camille spreekt (normaal volume) | 'open'
+    btDelay: 1.5,             // s: tijd die Bluetooth nodig heeft om van telefoon- naar muziekprofiel te schakelen
     whisperModel: 'whisper-large-v3-turbo',
     voiceGenderDevice: 'f',   // hoe de Franse standaardstem van het toestel klinkt
     genderMain: 'f',          // stem voor vragen en antwoorden
@@ -62,6 +63,8 @@
     settings.model = DEFAULT_MODEL;
     save(STORE.settings, settings);
   }
+  if (settings.micOffWhileSpeaking === false) settings.micWhileSpeaking = 'open';
+  delete settings.micOffWhileSpeaking;
   let levelState = load(STORE.level, null);
   if (!levelState || !RP.LEVELS.includes(levelState.level)) levelState = RP.newLevelState('A2');
   let sessions = load(STORE.sessions, []);
@@ -149,9 +152,15 @@
      en via Bluetooth via het telefoonprofiel. Daarom gaat de microfoon dicht zolang Camille spreekt;
      bij het luisteren gaat hij weer open (zonder nieuwe toestemming). */
   function speak(text, token, lang, role) {
-    if (mic && settings.micOffWhileSpeaking !== false && hasTTS && text) {
-      releaseMic();
-      return sleep(300).then(() => (token !== undefined && token !== loopToken) ? undefined : speakNow(text, token, lang, role));
+    if (!hasTTS || !text) return Promise.resolve();
+    if (settings.micWhileSpeaking !== 'open') {
+      if (mic) releaseMic();
+      /* Bluetooth schakelt na het sluiten van de microfoon terug naar het muziekprofiel. Dat duurt even:
+         wacht het restant van de wachttijd af, anders valt het begin van de zin weg. */
+      const left = Math.round((settings.btDelay ?? DEFAULTS.btDelay) * 1000) - (Date.now() - micClosedAt);
+      if (micClosedAt && left > 0) {
+        return sleep(left).then(() => (token !== undefined && token !== loopToken) ? undefined : speakNow(text, token, lang, role));
+      }
     }
     return speakNow(text, token, lang, role);
   }
@@ -370,6 +379,8 @@
     else askModel('[START]', null, loopToken);
   }
 
+  let micClosedAt = 0;      // tijdstip waarop de microfoon het laatst dichtging (voor de Bluetooth-wachttijd)
+
   function stopRecognition() {
     vad = null;
     meter(0, 1);
@@ -377,6 +388,7 @@
     if (rec) {
       try { rec.onend = null; rec.onresult = null; rec.onerror = null; rec.abort(); } catch (e) { /* negeren */ }
       rec = null;
+      micClosedAt = Date.now();
     }
   }
 
@@ -515,6 +527,7 @@
     vad = null;
     if (!mic) return;
     const m = mic; mic = null;
+    micClosedAt = Date.now();
     try { m.proc.onaudioprocess = null; m.src.disconnect(); m.proc.disconnect(); m.sink.disconnect(); } catch (e) { /* negeren */ }
     try { m.stream.getTracks().forEach(t => t.stop()); } catch (e) { /* negeren */ }
     try { m.ctx.close(); } catch (e) { /* negeren */ }
@@ -557,6 +570,7 @@
     } else if (ev.type === 'end') {
       vad = null;
       meter(0, 1);
+      if (settings.micWhileSpeaking !== 'open') releaseMic();   // Bluetooth kan al omschakelen tijdens het verwerken
       processRecording(ev.samples, v.rate, v.token);
     }
   }
@@ -1492,7 +1506,10 @@
     $('set-gender-main').value = settings.genderMain === 'm' ? 'm' : 'f';
     $('set-gender-corr').value = settings.genderCorr === 'f' ? 'f' : 'm';
     $('set-stt').value = settings.sttEngine === 'chrome' ? 'chrome' : 'whisper';
-    $('set-micoff').checked = settings.micOffWhileSpeaking !== false;
+    $('set-micmode').value = settings.micWhileSpeaking === 'open' ? 'open' : 'close';
+    $('set-btdelay').value = settings.btDelay ?? DEFAULTS.btDelay;
+    $('set-btdelay-out').textContent = fmtPause(settings.btDelay ?? DEFAULTS.btDelay);
+    $('set-btdelay-wrap').classList.toggle('hidden', $('set-micmode').value === 'open');
     $('set-humor').value = RP.HUMOR_LEVELS.includes(settings.humor) ? settings.humor : 'afentoe';
     $('set-translate').checked = settings.showTranslation !== false;
     $('set-vsyn').checked = settings.vocabSynonyms !== false;
@@ -1525,7 +1542,9 @@
     settings.genderMain = g('set-gender-main');
     settings.genderCorr = g('set-gender-corr');
     settings.sttEngine = $('set-stt').value === 'chrome' ? 'chrome' : 'whisper';
-    settings.micOffWhileSpeaking = $('set-micoff').checked;
+    settings.micWhileSpeaking = $('set-micmode').value === 'open' ? 'open' : 'close';
+    const bd = parseFloat($('set-btdelay').value);
+    settings.btDelay = isFinite(bd) ? Math.min(3, Math.max(0, bd)) : DEFAULTS.btDelay;
     settings.humor = RP.HUMOR_LEVELS.includes($('set-humor').value) ? $('set-humor').value : 'afentoe';
     settings.showTranslation = $('set-translate').checked;
     settings.vocabSynonyms = $('set-vsyn').checked;
@@ -1579,6 +1598,8 @@
     $('set-rate').addEventListener('input', e => { $('set-rate-out').textContent = Number(e.target.value).toFixed(2); });
     $('set-pause').addEventListener('input', e => { $('set-pause-out').textContent = fmtPause(e.target.value); });
     $('set-corr').addEventListener('change', updateCorrHint);
+    $('set-btdelay').addEventListener('input', e => { $('set-btdelay-out').textContent = fmtPause(e.target.value); });
+    $('set-micmode').addEventListener('change', () => $('set-btdelay-wrap').classList.toggle('hidden', $('set-micmode').value === 'open'));
 
     $('btn-save-settings').addEventListener('click', () => {
       readSettingsForm();
