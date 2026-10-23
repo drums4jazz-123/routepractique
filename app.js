@@ -2,7 +2,7 @@
 (function () {
   'use strict';
 
-  const VERSION = '2.1.2';
+  const VERSION = '2.1.3';
   const STORE = { settings: 'rp.settings', level: 'rp.levelState', sessions: 'rp.sessions', vocab: 'rp.vocab', mywords: 'rp.mywords', examples: 'rp.examples' };
   const DEFAULT_MODEL = 'openai/gpt-oss-120b';
   /* Modellen die Groq heeft stopgezet: automatisch vervangen door het standaardmodel. */
@@ -27,8 +27,6 @@
     vocabExamples: true,      // voorbeeldzin na elk woord
     collectWords: true,       // woorden uit gesprekken toevoegen aan de woordentraining
     sttEngine: 'whisper',     // 'whisper' (eigen opname, geen biepjes) | 'chrome'
-    micWhileSpeaking: 'close', // 'close' = microfoon dicht terwijl Camille spreekt (normaal volume) | 'open'
-    btDelay: 1.5,             // s: tijd die Bluetooth nodig heeft om van telefoon- naar muziekprofiel te schakelen
     whisperModel: 'whisper-large-v3-turbo',
     voiceGenderDevice: 'f',   // hoe de Franse standaardstem van het toestel klinkt
     genderMain: 'f',          // stem voor vragen en antwoorden
@@ -63,8 +61,8 @@
     settings.model = DEFAULT_MODEL;
     save(STORE.settings, settings);
   }
-  if (settings.micOffWhileSpeaking === false) settings.micWhileSpeaking = 'open';
-  delete settings.micOffWhileSpeaking;
+  // Instellingen uit 2.1.1 en 2.1.2 vervallen: de microfoon blijft voortaan de hele sessie open.
+  delete settings.micOffWhileSpeaking; delete settings.micWhileSpeaking; delete settings.btDelay;
   let levelState = load(STORE.level, null);
   if (!levelState || !RP.LEVELS.includes(levelState.level)) levelState = RP.newLevelState('A2');
   let sessions = load(STORE.sessions, []);
@@ -148,21 +146,25 @@
   /* Spreekt tekst uit; resolve wanneer klaar. Bewaking via polling omdat onend op Android soms uitblijft.
      lang 'nl' gebruikt een Nederlandse stem (voor de uitleg bij een correctie).
      role 'main' = vragen en antwoorden, 'corr' = verbetering. */
-  /* Een open microfoon zet Android in "gespreksmodus": de stem gaat dan via het (zachtere) gesprekskanaal,
-     en via Bluetooth via het telefoonprofiel. Daarom gaat de microfoon dicht zolang Camille spreekt;
-     bij het luisteren gaat hij weer open (zonder nieuwe toestemming). */
+  /* De microfoon blijft de hele sessie open. Zo hoeft een Bluetooth-koptelefoon niet telkens te wisselen
+     tussen het telefoon- en het muziekprofiel (daarbij viel het begin van Camilles zinnen weg).
+     Gaat de microfoon pas net open (start, hervatten), dan wacht Camille tot Bluetooth omgeschakeld is. */
+  const MIC_SETTLE_MS = 1500;
   function speak(text, token, lang, role) {
     if (!hasTTS || !text) return Promise.resolve();
-    if (settings.micWhileSpeaking !== 'open') {
-      if (mic) releaseMic();
-      /* Bluetooth schakelt na het sluiten van de microfoon terug naar het muziekprofiel. Dat duurt even:
-         wacht het restant van de wachttijd af, anders valt het begin van de zin weg. */
-      const left = Math.round((settings.btDelay ?? DEFAULTS.btDelay) * 1000) - (Date.now() - micClosedAt);
-      if (micClosedAt && left > 0) {
-        return sleep(left).then(() => (token !== undefined && token !== loopToken) ? undefined : speakNow(text, token, lang, role));
-      }
+    const cancelled = () => token !== undefined && token !== loopToken;
+    if (sess && useWhisper() && !mic) {
+      return ensureMic().then(() => settleMic(), () => {})
+        .then(() => cancelled() ? undefined : speakNow(text, token, lang, role));
+    }
+    if (mic && Date.now() - micOpenedAt < MIC_SETTLE_MS) {
+      return settleMic().then(() => cancelled() ? undefined : speakNow(text, token, lang, role));
     }
     return speakNow(text, token, lang, role);
+  }
+  function settleMic() {
+    const left = MIC_SETTLE_MS - (Date.now() - micOpenedAt);
+    return left > 0 ? sleep(left) : Promise.resolve();
   }
 
   function speakNow(text, token, lang, role) {
@@ -379,7 +381,7 @@
     else askModel('[START]', null, loopToken);
   }
 
-  let micClosedAt = 0;      // tijdstip waarop de microfoon het laatst dichtging (voor de Bluetooth-wachttijd)
+  let micOpenedAt = 0;      // tijdstip waarop de microfoon openging (Bluetooth heeft even tijd nodig om om te schakelen)
 
   function stopRecognition() {
     vad = null;
@@ -388,7 +390,6 @@
     if (rec) {
       try { rec.onend = null; rec.onresult = null; rec.onerror = null; rec.abort(); } catch (e) { /* negeren */ }
       rec = null;
-      micClosedAt = Date.now();
     }
   }
 
@@ -504,8 +505,7 @@
     if (micPromise) return micPromise;
     micPromise = (async () => {
       const stream = await navigator.mediaDevices.getUserMedia({
-        /* Geen echo-onderdrukking: de app luistert nooit terwijl Camille spreekt, en echo-onderdrukking
-           zet Android in gespreksmodus (zachter volume). */
+        /* Geen echo-onderdrukking nodig: wat de microfoon opvangt terwijl Camille spreekt, wordt genegeerd. */
         audio: { echoCancellation: false, noiseSuppression: true, autoGainControl: true, channelCount: 1 }
       });
       const AC = window.AudioContext || window.webkitAudioContext;
@@ -518,6 +518,7 @@
       src.connect(proc); proc.connect(sink); sink.connect(ctx.destination);
       proc.onaudioprocess = e => onAudioFrame(e.inputBuffer.getChannelData(0));
       mic = { ctx, stream, src, proc, sink, rate: ctx.sampleRate };
+      micOpenedAt = Date.now();
       return mic;
     })();
     return micPromise.finally(() => { micPromise = null; });
@@ -527,7 +528,6 @@
     vad = null;
     if (!mic) return;
     const m = mic; mic = null;
-    micClosedAt = Date.now();
     try { m.proc.onaudioprocess = null; m.src.disconnect(); m.proc.disconnect(); m.sink.disconnect(); } catch (e) { /* negeren */ }
     try { m.stream.getTracks().forEach(t => t.stop()); } catch (e) { /* negeren */ }
     try { m.ctx.close(); } catch (e) { /* negeren */ }
@@ -570,7 +570,6 @@
     } else if (ev.type === 'end') {
       vad = null;
       meter(0, 1);
-      if (settings.micWhileSpeaking !== 'open') releaseMic();   // Bluetooth kan al omschakelen tijdens het verwerken
       processRecording(ev.samples, v.rate, v.token);
     }
   }
@@ -1506,10 +1505,6 @@
     $('set-gender-main').value = settings.genderMain === 'm' ? 'm' : 'f';
     $('set-gender-corr').value = settings.genderCorr === 'f' ? 'f' : 'm';
     $('set-stt').value = settings.sttEngine === 'chrome' ? 'chrome' : 'whisper';
-    $('set-micmode').value = settings.micWhileSpeaking === 'open' ? 'open' : 'close';
-    $('set-btdelay').value = settings.btDelay ?? DEFAULTS.btDelay;
-    $('set-btdelay-out').textContent = fmtPause(settings.btDelay ?? DEFAULTS.btDelay);
-    $('set-btdelay-wrap').classList.toggle('hidden', $('set-micmode').value === 'open');
     $('set-humor').value = RP.HUMOR_LEVELS.includes(settings.humor) ? settings.humor : 'afentoe';
     $('set-translate').checked = settings.showTranslation !== false;
     $('set-vsyn').checked = settings.vocabSynonyms !== false;
@@ -1542,9 +1537,6 @@
     settings.genderMain = g('set-gender-main');
     settings.genderCorr = g('set-gender-corr');
     settings.sttEngine = $('set-stt').value === 'chrome' ? 'chrome' : 'whisper';
-    settings.micWhileSpeaking = $('set-micmode').value === 'open' ? 'open' : 'close';
-    const bd = parseFloat($('set-btdelay').value);
-    settings.btDelay = isFinite(bd) ? Math.min(3, Math.max(0, bd)) : DEFAULTS.btDelay;
     settings.humor = RP.HUMOR_LEVELS.includes($('set-humor').value) ? $('set-humor').value : 'afentoe';
     settings.showTranslation = $('set-translate').checked;
     settings.vocabSynonyms = $('set-vsyn').checked;
@@ -1598,8 +1590,6 @@
     $('set-rate').addEventListener('input', e => { $('set-rate-out').textContent = Number(e.target.value).toFixed(2); });
     $('set-pause').addEventListener('input', e => { $('set-pause-out').textContent = fmtPause(e.target.value); });
     $('set-corr').addEventListener('change', updateCorrHint);
-    $('set-btdelay').addEventListener('input', e => { $('set-btdelay-out').textContent = fmtPause(e.target.value); });
-    $('set-micmode').addEventListener('change', () => $('set-btdelay-wrap').classList.toggle('hidden', $('set-micmode').value === 'open'));
 
     $('btn-save-settings').addEventListener('click', () => {
       readSettingsForm();
@@ -1613,12 +1603,30 @@
       show('home');
     });
 
-    $('btn-test-voice').addEventListener('click', () => {
+    /* De stemtest gebeurt met open microfoon, net als tijdens een sessie: zo hoor je hetzelfde volume
+       en kun je het meteen instellen met de volumeknoppen (Android onthoudt dat gespreksvolume). */
+    let voiceTesting = false;
+    $('btn-test-voice').addEventListener('click', async () => {
       readSettingsForm();
       if (!voices.length) { settingsMsg('Geen Franse stem gevonden op dit toestel.', 'warn'); return; }
+      if (voiceTesting || sess) return;
+      voiceTesting = true;
       const intro = settings.genderMain === 'm' ? 'Bonjour ! Je suis Camille, ton partenaire de conversation.' : 'Bonjour ! Je suis Camille, ta partenaire de conversation.';
-      speak(intro + ' On fait un petit tour en français ?', undefined, 'fr', 'main')
-        .then(() => speak('On dit plutôt : je suis allé au marché.', undefined, 'fr', 'corr'));
+      let opened = false;
+      if (canWhisper()) {
+        settingsMsg('Microfoon openen…');
+        try { await ensureMic(); opened = true; await settleMic(); } catch (e) { /* zonder microfoon testen */ }
+      }
+      settingsMsg(opened
+        ? 'Zo klinkt Camille tijdens een sessie. Druk nu op de volumeknop omhoog om het volume in te stellen.'
+        : 'Microfoon niet beschikbaar: de test klinkt mogelijk luider dan tijdens een sessie.', opened ? 'ok' : 'warn');
+      try {
+        await speak(intro + ' On fait un petit tour en français ? Je parle encore un peu, pour que tu puisses régler le volume.', undefined, 'fr', 'main');
+        await speak('On dit plutôt : je suis allé au marché.', undefined, 'fr', 'corr');
+      } finally {
+        if (opened && !sess) releaseMic();
+        voiceTesting = false;
+      }
     });
 
     $('btn-test-api').addEventListener('click', async () => {

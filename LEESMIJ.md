@@ -1,4 +1,4 @@
-# RoutePratique – webversie 2.1.2
+# RoutePratique – webversie 2.1.3
 
 Franse gesprekspartner om Frans te spreken, thuis, onderweg of in de auto. Je spreekt, de app toont je zin, een verbeterde versie en het antwoord met de Nederlandse vertaling, en spreekt het antwoord uit. Daarnaast is er een woordentraining in beide richtingen.
 
@@ -90,9 +90,8 @@ Standaard neemt de app je stem zelf op en laat ze uitschrijven door Whisper bij 
 - Na je zin verschijnt kort "Verwerkt je zin…" (opsturen en uitschrijven, meestal minder dan een seconde).
 - Volgens de documentatie van Groq kan je ongeveer 8 uur spraak per dag laten uitschrijven; elke zin telt minstens 10 seconden mee.
 - Bij ⚙ › Spraakherkenning kan je terug naar "Google in Chrome" (met biepjes). Lukt de eigen opname niet, dan schakelt de app vanzelf over op Google.
-- **Volume.** Een open microfoon zet Android in "gespreksmodus": de stem klinkt dan zachter (en via Bluetooth via het telefoonprofiel). Daarom gaat de microfoon dicht zolang Camille spreekt en weer open als ze luistert (instelling **Microfoon terwijl Camille spreekt**, standaard "Sluiten"). Klinkt Camille toch nog stil, druk dan op de volumeknop terwijl ze spreekt.
-- **Bluetooth-koptelefoon of auto.** Bluetooth gebruikt twee profielen: een telefoonprofiel (microfoon aan, lagere kwaliteit) en een muziekprofiel (alleen geluid, normale kwaliteit). Omschakelen duurt 1 à 2 seconden; wat Camille in die tijd zegt, hoor je niet. Daarom sluit de app de microfoon zodra je stopt met spreken en wacht Camille daarna nog de **Bluetooth-wachttijd** (standaard 1,5 s, instelbaar van 0 tot 3 s). Valt het begin van haar zinnen nog weg, zet de wachttijd hoger. Zonder Bluetooth mag ze op 0.
-- **Open laten.** Bij **Microfoon terwijl Camille spreekt** kun je ook "Open laten" kiezen: dan is er geen omschakeling en geen wachttijd, maar klinkt Camille mogelijk zachter. [ONZEKER – nog te testen op de Moto G84: of het volume met "Open laten" normaal blijft nu de echo-onderdrukking uit staat.]
+- **Microfoon blijft open.** De microfoon gaat open bij de start en blijft open tot je pauzeert of stopt. Zo hoeft een Bluetooth-koptelefoon niet telkens te wisselen tussen het telefoon- en het muziekprofiel, waardoor eerder het begin van Camilles zinnen wegviel. Na het openen wacht Camille 1,5 s voor ze begint te spreken.
+- **Volume.** Met een open microfoon zet Android de telefoon in "gespreksmodus": het geluid volgt dan het **gespreksvolume**, niet het mediavolume. Dat is een aparte schuif, die Android onthoudt (ook per Bluetooth-koptelefoon). Stel hem één keer in: tik bij Instellingen op **Test stem** (die opent nu ook de microfoon) en druk tijdens het spreken op de volumeknop omhoog. Hetzelfde kan tijdens een sessie, terwijl Camille spreekt. [ONZEKER – nog te testen op de Moto G84 met jouw koptelefoon: of het maximale gespreksvolume even luid is als het mediavolume.]
 
 ## Gespreksvorm: wie stelt de vragen?
 

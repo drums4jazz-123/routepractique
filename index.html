@@ -205,21 +205,6 @@
       <small class="muted">Whisper werkt via je Groq-sleutel. De balk onder "Luistert…" toont of de microfoon je hoort. Werkt de eigen opname niet, dan schakelt de app vanzelf over op Google.</small>
     </label>
 
-    <label class="field">
-      <span>Microfoon terwijl Camille spreekt</span>
-      <select id="set-micmode">
-        <option value="close">Sluiten (normaal volume)</option>
-        <option value="open">Open laten</option>
-      </select>
-      <small class="muted">Een open microfoon kan Android in "gespreksmodus" zetten: Camille klinkt dan zachter.</small>
-    </label>
-
-    <label class="field" id="set-btdelay-wrap">
-      <span>Bluetooth-wachttijd: <b id="set-btdelay-out">1,5 s</b></span>
-      <input type="range" id="set-btdelay" min="0" max="3" step="0.25">
-      <small class="muted">Valt met een Bluetooth-koptelefoon of in de auto het begin van Camilles zinnen weg, zet dit hoger. Zonder Bluetooth mag het op 0.</small>
-    </label>
-
     <label class="field check">
       <input type="checkbox" id="set-translate">
       <span>Nederlandse vertaling tonen onder het antwoord van Camille</span>
@@ -269,6 +254,7 @@
       <button class="btn" id="btn-test-voice">Test stem</button>
       <button class="btn" id="btn-test-api">Test verbinding</button>
     </div>
+    <small class="muted">"Test stem" opent de microfoon, net als tijdens een sessie. Met een open microfoon regelt Android het geluid via het gespreksvolume, los van het mediavolume. Druk tijdens de test op de volumeknop omhoog: Android onthoudt dat volume, ook voor je Bluetooth-koptelefoon.</small>
     <p class="notice hidden" id="settings-msg"></p>
 
     <button class="btn primary" id="btn-save-settings">Opslaan</button>
