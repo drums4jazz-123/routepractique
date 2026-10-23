@@ -1,6 +1,6 @@
-# RoutePratique – webversie 1.8.0
+# RoutePratique – webversie 2.1.0
 
-Franse gesprekspartner voor in de auto. Je spreekt, de app toont je zin, een verbeterde versie en het antwoord, en spreekt het antwoord uit.
+Franse gesprekspartner om Frans te spreken, thuis, onderweg of in de auto. Je spreekt, de app toont je zin, een verbeterde versie en het antwoord met de Nederlandse vertaling, en spreekt het antwoord uit. Daarnaast is er een woordentraining in beide richtingen.
 
 ## Wat je nodig hebt
 
@@ -14,7 +14,7 @@ Franse gesprekspartner voor in de auto. Je spreekt, de app toont je zin, een ver
 De app moet via https draaien, anders geeft Chrome geen toegang tot de microfoon.
 
 1. Maak op github.com een nieuwe, **publieke** repository, bijvoorbeeld `routepratique`.
-2. Kies "uploading an existing file" en sleep **de inhoud** van de map (index.html, app.js, logic.js, style.css, sw.js, manifest.json en de map icons) erin. De bestanden moeten in de hoofdmap van de repository staan, niet in een submap.
+2. Kies "uploading an existing file" en sleep **de inhoud** van de map (index.html, app.js, logic.js, vocab.js, woorden.js, style.css, sw.js, manifest.json en de map icons) erin. De bestanden moeten in de hoofdmap van de repository staan, niet in een submap.
 3. Klik op "Commit changes".
 4. Ga naar Settings → Pages. Kies bij "Branch" `main` en map `/ (root)`, en klik op Save.
 5. Na een minuut of twee staat de app op `https://<jouw-gebruikersnaam>.github.io/routepratique/`.
@@ -31,9 +31,10 @@ Je API-sleutel zit **niet** in de code en komt dus nooit op GitHub terecht.
 
 Bij de eerste start vraagt Chrome toestemming voor de microfoon. Kies "Toestaan".
 
-## 3. Gebruik in de auto
+## 3. Gebruik
 
-- Koppel de telefoon via Bluetooth, kies een thema en tik op **Start gesprek** vóór je vertrekt.
+- Kies op het startscherm een thema, een gespreksvorm en een **Situatie**: *Algemeen* (standaard) of *In de auto, ik rij*. In de auto houdt Camille rekening met het verkeer: korte beurten en niets om op het scherm te lezen. In de stand Algemeen veronderstelt ze niet waar je bent.
+- In de auto: koppel de telefoon via Bluetooth en tik op **Start gesprek** vóór je vertrekt.
 - Daarna verloopt alles met spraak. Laat de app op het scherm staan; het scherm blijft aan.
 - Gesproken commando's (kort uitspreken):
   - "Répète" of "Pardon ?" – herhaalt het laatste antwoord
@@ -43,6 +44,42 @@ Bij de eerste start vraagt Chrome toestemming voor de microfoon. Kies "Toestaan"
   - "À moi de poser les questions" – jij stelt voortaan de vragen
   - "À toi de poser les questions" – Camille stelt weer de vragen
 - Na de sessie toont het verslag je correcties onder "Om te herhalen" en het volledige gesprek. Met ⧉ kopieer je het als tekst.
+
+## Woordentraining
+
+Kies op het startscherm bij **Oefenvorm** voor *Woordentraining* en stel in:
+
+- **Richting**: *Frans → Nederlands*, *Nederlands → Frans (met lidwoord)* of *Gemengd*.
+- **Woordthema**: een van de 27 thema's uit het brondocument, *Uit je gesprekken* (woorden die je in gesprekken niet kende of fout gebruikte), of alle thema's.
+- **Aantal woorden**: 10, 20 of 30.
+
+De woorden komen uit het brondocument (1.112 woorden en uitdrukkingen), op jouw niveau en lager. Onder de keuzes zie je hoeveel woorden er zijn, hoeveel aan herhaling toe zijn en hoeveel je goed kent.
+
+**Verloop.** Camille zegt het woord (Frans met de Franse stem, Nederlands met de Nederlandse stem) en jij spreekt de vertaling in. Juist: meteen het volgende woord. Fout: een tweede kans met een hint (eerste letter en aantal letters). Nog eens fout of "je ne sais pas": Camille zegt het juiste antwoord. Bij een Frans antwoord kan je het nazeggen voor de uitspraak; dat telt niet mee, en wie zwijgt gaat na 6 seconden verder.
+
+**Voorbeeldzin.** Na elk woord zegt Camille een korte voorbeeldzin op jouw niveau; de Nederlandse vertaling staat op het scherm. De zin wordt al gemaakt terwijl jij antwoordt en daarna bewaard, zodat hij de volgende keer meteen klaar staat.
+
+**Synoniemen.** Keurt de app je antwoord af, dan laat ze het eerst nakijken door Camille ("Even nakijken…"). Is het een juiste vertaling met dezelfde betekenis (bijvoorbeeld *zetel* in plaats van *bank*), dan krijg je het punt: "Oui, ça marche aussi !". In het verslag staat het onder "Ook goed gerekend (synoniem)". Ook hier telt bij Nederlands → Frans het lidwoord mee.
+
+**Spreektaal.** "Je sais pas" en "je ne sais pas" zijn allebei goed: het weglaten van *ne* telt nooit als fout.
+
+**Lidwoord.** Bij Nederlands → Frans telt het lidwoord mee bij zelfstandige naamwoorden: "boulangerie" zonder lidwoord of "le boulangerie" telt als fout ("Attention à l'article : la boulangerie"). *Une boulangerie* is wel goed, net als *un avion* voor *l'avion*, waar je het geslacht anders niet hoort. Bij Frans → Nederlands telt *de/het* niet mee. Kleine uitspraak- of herkenningsfoutjes tellen als "bijna juist" en krijgen het punt.
+
+**Gesproken commando's tijdens de training:** "indice" of "hint" (hint), "je ne sais pas" of "ik weet het niet" (overslaan), "répète" of "herhaal" (woord herhalen), "plus lentement" (trager), "pause", "on arrête" (stoppen, verslag).
+
+**Slim herhalen.** Elk woord zit per richting in een van vijf vakjes. Juist: een vakje verder en het komt later terug (na 1, 3, 7 of 21 dagen). Fout: terug naar vakje 1, het komt in de volgende training terug. Elke training begint met wat aan herhaling toe is en vult aan met nieuwe woorden, laagste niveau eerst.
+
+**Verslag.** Na de training: score, "Om te herhalen", "Let op het lidwoord" en alle woorden. Het staat ook in de lijst Verslagen. "Opnieuw beginnen" bij Instellingen wist ook deze voortgang.
+
+**Woorden uit gesprekken.** Kende je in een gesprek een woord niet (je zei het in het Nederlands of vroeg hoe je het zegt) of gebruikte je een verkeerd woord, dan zet Camille het in je woordentraining. Je ziet in het gesprek "＋ In je woordentraining: …" en in het verslag "Nieuw in je woordentraining". Die woorden komen bij de volgende training (Nederlands → Frans) meteen aan bod, ook bij *Alle thema's*. Staat het woord al in het brondocument, dan komt dat woord gewoon opnieuw in de herhaling. Grammaticafouten leveren geen woorden op.
+
+**Instellingen.** Bij ⚙ › Woordentraining kan je de synoniemcontrole, de voorbeeldzin en het verzamelen van woorden uit gesprekken elk apart uitzetten.
+
+**Nederlandse stem.** Voor Nederlands → Frans spreekt Camille het woord uit met een Nederlandse stem. Zonder Nederlandse stem staat het woord alleen op het scherm; in de stand *In de auto* kan Nederlands → Frans dan niet, en *Gemengd* wordt *Frans → Nederlands*.
+
+## Nederlandse vertaling
+
+Onder elk antwoord van Camille staat in het klein de Nederlandse vertaling. Ze wordt niet voorgelezen en staat ook in het verslag. Uitzetten kan bij Instellingen (⚙) met **Nederlandse vertaling tonen**; Camille levert dan ook geen vertaling meer.
 
 ## Spraakherkenning zonder biepjes
 
@@ -93,7 +130,7 @@ Bij Instellingen (⚙) stel je met **Denkpauze** in hoelang de app wacht als je 
 
 ## Opnieuw beginnen
 
-Bij Instellingen (⚙) wist de knop **Opnieuw beginnen** alle verslagen, de statistieken en de niveaugeschiedenis. Je start op het niveau dat in het keuzemenu staat. API-sleutel, stem en spreeksnelheid blijven behouden. Met **Alleen verslagen wissen** verwijder je enkel de verslagen.
+Bij Instellingen (⚙) wist de knop **Opnieuw beginnen** alle verslagen, de statistieken, de niveaugeschiedenis en je voortgang in de woordentraining (ook de woorden uit je gesprekken). Je start op het niveau dat in het keuzemenu staat. API-sleutel, stem en spreeksnelheid blijven behouden. Met **Alleen verslagen wissen** verwijder je enkel de verslagen.
 
 ## Niveau-aanpassing
 
@@ -108,8 +145,11 @@ Vervang de bestanden in de GitHub-repository (Add file › Upload files, of rech
 - Zonder mobiele data werkt de app niet: zowel de spraakherkenning als het taalmodel lopen via internet.
 - Verlaat de app het scherm (ander venster, scherm vergrendeld), dan pauzeert ze. Tik op "Hervat".
 - Met "Google in Chrome" laat Android bij elke luisterbeurt een kort geluidje horen; dat kan een webapp niet uitschakelen. Gebruik daarom de standaard "Eigen opname + Whisper".
+- **Nog te testen op de Moto G84:** hoe goed Whisper losse woorden herkent (korte opnames zijn moeilijker dan zinnen). Op het scherm zie je altijd wat de app verstond.
 - **Nog te testen op de Moto G84:** hoe goed de eigen opname werkt met de microfoon van de auto (Bluetooth) en bij veel rijgeluid. Pikt de balk je stem niet op of ziet hij rijgeluid als spraak, meld het dan.
 - **Nog te testen op de Moto G84:** of Chrome de Bluetooth-microfoon van de auto gebruikt of de microfoon van de telefoon. Werkt de herkenning slecht, leg de telefoon dan dichter bij je of controleer de Bluetooth-instellingen voor "Telefoongesprekken".
-- De denkpauze gebruikt de continue spraakherkenning van Chrome. Op Android stuurt die na elk woord de volledige zin tot dan toe door en verbetert ze soms de laatste woorden. Vanaf versie 1.3.1 voegt de app die stukken samen zonder herhalingen. Zie je toch nog herhalingen in "Jouw zin", meld het dan met een voorbeeld uit het verslag.
+- Alleen met "Google in Chrome": die herkenning stuurt op Android na elk woord de volledige zin tot dan toe door. De app voegt die stukken samen zonder herhalingen; zie je toch herhalingen in "Jouw zin", meld het met een voorbeeld uit het verslag. Met Whisper (standaard) speelt dit niet.
+- In een gesprek luistert de app in het Frans. Zeg je tussendoor een Nederlands woord, dan wordt dat soms als een Frans klinkend woord uitgeschreven. Vraag het liever in het Frans ("Comment on dit … ?").
+- In de woordentraining wacht de app na een los woord hoogstens 1,5 seconde stilte (ook als je denkpauze langer staat), zodat de training vlot blijft.
 - Groq stopt geregeld met oudere modellen. Meldt de app dat het model niet meer bestaat, kies dan bij Instellingen een ander taalmodel (zie console.groq.com/docs/models). Standaard: openai/gpt-oss-120b.
 - De gratis limieten van Groq kunnen wijzigen. Bij een limietmelding wacht de app even en probeert opnieuw.

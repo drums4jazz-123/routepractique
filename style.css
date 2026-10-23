@@ -86,7 +86,7 @@ body {
 .field { display: flex; flex-direction: column; gap: 6px; }
 .field > span { font-weight: 600; font-size: 15px; }
 .field.check { flex-direction: row; align-items: center; gap: 10px; }
-.field.check input { width: 22px; height: 22px; }
+.field.check input { width: 22px; height: 22px; flex: 0 0 22px; }
 
 input[type=text], input[type=password], select {
   font: inherit;
@@ -205,3 +205,18 @@ input[type=range] { width: 100%; }
 .meter { height: 6px; background: var(--surface-2); border-radius: 3px; overflow: hidden; margin: 0 20%; }
 #talk-meter { height: 100%; width: 0; background: var(--muted); transition: width 60ms linear; }
 #talk-meter.voice { background: var(--ok-text); }
+.blk-app .nl { margin-top: 4px; padding-top: 4px; border-top: 1px dashed var(--border); font-size: 14px; font-style: italic; color: var(--muted); }
+.turn.compact .blk-app .nl { display: none; }
+.opts { display: flex; flex-direction: column; gap: 14px; }
+.blk-ask { background: var(--surface); border: 2px solid var(--accent); }
+.blk-ask .lbl { color: var(--accent-text); }
+.blk-ask .txt { font-size: 22px; font-weight: 600; }
+.blk-ask .why { color: var(--muted); font-size: 13px; margin-top: 2px; }
+.blk-hint { background: var(--surface-2); border-color: transparent; }
+.blk-hint .lbl { color: var(--muted); }
+.turn.compact .blk-ask { border-width: 1px; background: var(--surface-2); }
+.turn.compact .blk-ask .txt { font-size: 15px; font-weight: 400; color: var(--muted); }
+.turn.compact .blk-ask .lbl, .turn.compact .blk-ask .why, .turn.compact .blk-hint, .turn.compact .sys { display: none; }
+.settings-group { margin: 8px 0 -4px; font-weight: 700; font-size: 15px; color: var(--accent-text); }
+.turn.compact .blk-ask ~ .blk-app { display: none; }
+.row.align-end { align-items: flex-end; }

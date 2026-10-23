@@ -26,6 +26,15 @@
     </div>
 
     <label class="field">
+      <span>Oefenvorm</span>
+      <select id="sel-mode">
+        <option value="gesprek">Gesprek met Camille</option>
+        <option value="woorden">Woordentraining</option>
+      </select>
+    </label>
+
+    <div id="conv-opts" class="opts">
+    <label class="field">
       <span>Thema</span>
       <select id="sel-theme"></select>
     </label>
@@ -33,7 +42,42 @@
     <label class="field">
       <span>Gespreksvorm</span>
       <select id="sel-style"></select>
-      <small class="muted">Wie stelt de vragen? Tijdens de rit wissel je met "À moi de poser les questions" of "À toi de poser les questions".</small>
+      <small class="muted">Wie stelt de vragen? Tijdens het gesprek wissel je met "À moi de poser les questions" of "À toi de poser les questions".</small>
+    </label>
+    </div>
+
+    <div id="vocab-opts" class="opts hidden">
+      <label class="field">
+        <span>Richting</span>
+        <select id="sel-vdir">
+          <option value="fn">Frans → Nederlands</option>
+          <option value="nf">Nederlands → Frans (met lidwoord)</option>
+          <option value="mix">Gemengd</option>
+        </select>
+      </label>
+      <label class="field">
+        <span>Woordthema</span>
+        <select id="sel-vcat"></select>
+      </label>
+      <label class="field">
+        <span>Aantal woorden</span>
+        <select id="sel-vcount">
+          <option value="10">10</option>
+          <option value="20">20</option>
+          <option value="30">30</option>
+        </select>
+      </label>
+      <p class="muted small" id="vocab-info"></p>
+      <small class="muted">Zeg "indice" voor een hint, "je ne sais pas" om over te slaan, "répète" om te herhalen en "on arrête" om te stoppen.</small>
+    </div>
+
+    <label class="field">
+      <span>Situatie</span>
+      <select id="sel-context">
+        <option value="algemeen">Algemeen (thuis, onderweg, …)</option>
+        <option value="auto">In de auto, ik rij</option>
+      </select>
+      <small class="muted">In de auto houdt Camille rekening met het verkeer: korte beurten, niets om op het scherm te lezen.</small>
     </label>
 
     <div id="home-warning" class="notice warn hidden"></div>
@@ -129,7 +173,7 @@
       <small class="muted">Kies wat je hoort bij een normale toonhoogte. De Google-stem is standaard vrouwelijk, tenzij je in de Android-instellingen een mannelijke stem koos.</small>
     </label>
 
-    <div class="row">
+    <div class="row align-end">
       <label class="field" style="flex:1">
         <span>Stem voor de vragen</span>
         <select id="set-gender-main">
@@ -161,6 +205,11 @@
       <small class="muted">Whisper werkt via je Groq-sleutel. De balk onder "Luistert…" toont of de microfoon je hoort. Werkt de eigen opname niet, dan schakelt de app vanzelf over op Google.</small>
     </label>
 
+    <label class="field check">
+      <input type="checkbox" id="set-translate">
+      <span>Nederlandse vertaling tonen onder het antwoord van Camille</span>
+    </label>
+
     <label class="field">
       <span>Humor</span>
       <select id="set-humor">
@@ -187,6 +236,20 @@
       <small class="muted">Hoelang de app wacht als je stilvalt, voordat ze je antwoord als afgerond beschouwt. Langer = meer tijd om na te denken midden in een zin, maar ook iets langer wachten op Camille.</small>
     </label>
 
+    <p class="settings-group">Woordentraining</p>
+    <label class="field check">
+      <input type="checkbox" id="set-vsyn">
+      <span>Afgekeurde antwoorden laten nakijken op synoniemen</span>
+    </label>
+    <label class="field check">
+      <input type="checkbox" id="set-vex">
+      <span>Voorbeeldzin na elk woord</span>
+    </label>
+    <label class="field check">
+      <input type="checkbox" id="set-collect">
+      <span>Woorden uit gesprekken toevoegen aan de woordentraining</span>
+    </label>
+
     <div class="row">
       <button class="btn" id="btn-test-voice">Test stem</button>
       <button class="btn" id="btn-test-api">Test verbinding</button>
@@ -196,7 +259,7 @@
     <button class="btn primary" id="btn-save-settings">Opslaan</button>
     <div class="reset-box">
       <p class="reset-title">Opnieuw beginnen</p>
-      <p class="muted small">Wist alle verslagen, de statistieken en de niveaugeschiedenis. Je start op het niveau dat hierboven gekozen is. API-sleutel, stem en spreeksnelheid blijven behouden.</p>
+      <p class="muted small">Wist alle verslagen, de statistieken, de niveaugeschiedenis en je voortgang in de woordentraining. Je start op het niveau dat hierboven gekozen is. API-sleutel, stem en spreeksnelheid blijven behouden.</p>
       <button class="btn danger" id="btn-reset-all">↺ Opnieuw beginnen</button>
     </div>
     <button class="btn danger small-btn" id="btn-clear-history">Alleen verslagen wissen</button>
@@ -204,6 +267,8 @@
   </section>
 
   <script src="logic.js"></script>
+  <script src="woorden.js"></script>
+  <script src="vocab.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

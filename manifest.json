@@ -1,7 +1,7 @@
 {
   "name": "RoutePratique",
   "short_name": "RoutePratique",
-  "description": "Frans spreken oefenen tijdens het rijden",
+  "description": "Frans spreken oefenen met een gesprekspartner",
   "lang": "nl-BE",
   "start_url": "./",
   "scope": "./",

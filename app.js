@@ -2,8 +2,8 @@
 (function () {
   'use strict';
 
-  const VERSION = '1.8.0';
-  const STORE = { settings: 'rp.settings', level: 'rp.levelState', sessions: 'rp.sessions' };
+  const VERSION = '2.1.0';
+  const STORE = { settings: 'rp.settings', level: 'rp.levelState', sessions: 'rp.sessions', vocab: 'rp.vocab', mywords: 'rp.mywords', examples: 'rp.examples' };
   const DEFAULT_MODEL = 'openai/gpt-oss-120b';
   /* Modellen die Groq heeft stopgezet: automatisch vervangen door het standaardmodel. */
   const RETIRED_MODELS = ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant', 'qwen/qwen3-32b', 'qwen/qwen3.6-27b', 'meta-llama/llama-4-scout-17b-16e-instruct'];
@@ -17,6 +17,15 @@
     speakCorrection: 'zin',   // 'uit' | 'zin' | 'uitleg'
     conversationStyle: 'afwisselend', // 'afwisselend' | 'leerder' | 'camille'
     humor: 'afentoe',         // 'uit' | 'afentoe' | 'veel'
+    context: 'algemeen',      // 'algemeen' | 'auto'
+    showTranslation: true,    // Nederlandse vertaling onder Camilles antwoord
+    mode: 'gesprek',          // 'gesprek' | 'woorden'
+    vocabDir: 'fn',           // 'fn' (Frans → Nederlands) | 'nf' | 'mix'
+    vocabCat: 0,              // 0 = alle thema's
+    vocabCount: 20,
+    vocabSynonyms: true,      // afgekeurd antwoord laten nakijken door het taalmodel
+    vocabExamples: true,      // voorbeeldzin na elk woord
+    collectWords: true,       // woorden uit gesprekken toevoegen aan de woordentraining
     sttEngine: 'whisper',     // 'whisper' (eigen opname, geen biepjes) | 'chrome'
     whisperModel: 'whisper-large-v3-turbo',
     voiceGenderDevice: 'f',   // hoe de Franse standaardstem van het toestel klinkt
@@ -181,12 +190,15 @@
 
   /* ---------- Groq ---------- */
 
-  async function callGroq(messages, maxTokens) {
+  /* tries: aantal pogingen (extra aanvragen zoals voorbeeldzin en synoniemcontrole: 1, zodat niets blijft hangen). */
+  async function callGroq(messages, maxTokens, tries) {
     if (!settings.apiKey) throw Object.assign(new Error('Geen API-sleutel ingesteld.'), { fatal: true });
+    tries = tries || 3;
     let lastErr = null;
     let useJsonMode = true;
     const isReasoning = /gpt-oss/i.test(settings.model);
-    for (let attempt = 0; attempt < 3; attempt++) {
+    const wait = (attempt, ms) => (attempt < tries - 1 ? sleep(ms) : Promise.resolve());   // na de laatste poging niet meer wachten
+    for (let attempt = 0; attempt < tries; attempt++) {
       const ctrl = new AbortController();
       const timer = setTimeout(() => ctrl.abort(), REQUEST_TIMEOUT_MS);
       const body = { model: settings.model, messages, temperature: 0.7 };
@@ -219,6 +231,7 @@
           /* JSON-modus niet ondersteund of JSON-validatie mislukt: opnieuw proberen zonder JSON-modus. */
           if (useJsonMode && /response_format|json/i.test(text)) {
             useJsonMode = false;
+            if (attempt === tries - 1) tries++;     // deze poging telt niet mee
             continue;
           }
           throw Object.assign(new Error('Verzoek geweigerd (' + res.status + '): ' + text.slice(0, 160)), { fatal: true });
@@ -226,12 +239,12 @@
         if (res.status === 429) {
           const ra = parseFloat(res.headers.get('retry-after'));
           lastErr = new Error('Limiet van Groq bereikt, even wachten.');
-          await sleep(isFinite(ra) ? Math.min(ra, 20) * 1000 : 3000 * (attempt + 1));
+          await wait(attempt, isFinite(ra) ? Math.min(ra, 20) * 1000 : 3000 * (attempt + 1));
           continue;
         }
         if (!res.ok) {
           lastErr = new Error('Serverfout ' + res.status);
-          await sleep(1500 * (attempt + 1));
+          await wait(attempt, 1500 * (attempt + 1));
           continue;
         }
         const data = await res.json();
@@ -246,7 +259,7 @@
         if (e.fatal) throw e;
         lastErr = e.name === 'AbortError' ? new Error('Geen antwoord binnen de tijd (verbinding?).') : e;
         if (!navigator.onLine) lastErr = new Error('Geen internetverbinding.');
-        await sleep(1500 * (attempt + 1));
+        await wait(attempt, 1500 * (attempt + 1));
       }
     }
     throw lastErr || new Error('Onbekende fout.');
@@ -289,8 +302,15 @@
 
   function updateMeta() {
     if (!sess) return;
+    if (sess.mode === 'vocab') {
+      const v = sess.vocab, n = v.list.length;
+      const ok = v.results.filter(isOkResult).length;
+      $('talk-meta').textContent = `Woordentraining · ${RPV.DIRS_SHORT[v.dir]} · ${Math.min(v.i + 1, n)}/${n} · ✓ ${ok}${sess.context === 'auto' ? ' · 🚗' : ''}`;
+      $('talk-level').textContent = levelState.level;
+      return;
+    }
     const theme = RP.themeById(sess.theme).nl;
-    $('talk-meta').textContent = `${theme} · ${RP.STYLE_LABELS[sess.style] || ''} · ${minutes(Date.now() - sess.start)} min`;
+    $('talk-meta').textContent = `${theme} · ${RP.STYLE_LABELS[sess.style] || ''}${sess.context === 'auto' ? ' · 🚗' : ''} · ${minutes(Date.now() - sess.start)} min`;
     $('talk-level').textContent = levelState.level;
   }
 
@@ -299,6 +319,11 @@
     if (!settings.apiKey) { alert('Vul eerst je Groq API-sleutel in bij Instellingen.'); show('settings'); return; }
     settings.theme = $('sel-theme').value;
     settings.conversationStyle = RP.STYLES.includes($('sel-style').value) ? $('sel-style').value : 'afwisselend';
+    settings.context = $('sel-context').value === 'auto' ? 'auto' : 'algemeen';
+    settings.mode = $('sel-mode').value === 'woorden' ? 'woorden' : 'gesprek';
+    settings.vocabDir = ['fn', 'nf', 'mix'].includes($('sel-vdir').value) ? $('sel-vdir').value : 'fn';
+    settings.vocabCat = parseInt($('sel-vcat').value, 10) || 0;
+    settings.vocabCount = parseInt($('sel-vcount').value, 10) || 20;
     save(STORE.settings, settings);
 
     sess = {
@@ -307,12 +332,16 @@
       end: null,
       theme: settings.theme,
       style: settings.conversationStyle,
+      context: settings.context,
       startLevel: levelState.level,
       endLevel: levelState.level,
       turns: [],
       history: [],
-      lastReply: ''
+      lastReply: '',
+      mode: 'gesprek'
     };
+    if (settings.mode === 'woorden' && !startVocab()) { sess = null; return; }
+    listenLang = 'fr';
     $('talk-log').innerHTML = '';
     $('talk-interim').textContent = '';
     show('talk');
@@ -322,15 +351,17 @@
     requestWakeLock();
     // Eerste spraakuitvoer moet uit een tik komen: kort leeg fragment ontgrendelt TTS op Android.
     if (hasTTS) { const u = new SpeechSynthesisUtterance(' '); u.volume = 0; speechSynthesis.speak(u); }
+    whisperBroken = false;                           // bij elke sessie de eigen opname opnieuw proberen
     if (useWhisper()) ensureMic().catch(() => {});   // microfoontoestemming meteen bij de start vragen
     loopToken++;
-    askModel('[START]', null, loopToken);
+    if (sess.mode === 'vocab') vocabIntro(loopToken);
+    else askModel('[START]', null, loopToken);
   }
 
   function stopRecognition() {
     vad = null;
     meter(0, 1);
-    if (turnState) clearTimeout(turnState.timer);
+    if (turnState) { clearTimeout(turnState.timer); turnState.done = true; }
     if (rec) {
       try { rec.onend = null; rec.onresult = null; rec.onerror = null; rec.abort(); } catch (e) { /* negeren */ }
       rec = null;
@@ -340,6 +371,7 @@
   function pauseSession(reason) {
     if (!sess) return;
     loopToken++;
+    if (sess.vocab) clearTimeout(sess.vocab.timer);
     stopRecognition();
     releaseMic();
     if (hasTTS) speechSynthesis.cancel();
@@ -351,6 +383,12 @@
     if (!sess) return;
     loopToken++;
     requestWakeLock();
+    if (sess.mode === 'vocab') {
+      const v = sess.vocab;
+      if (v.phase === 'repeat' || v.phase === 'done') { v.phase = 'done'; vocabNext(loopToken); }
+      else vocabAsk(loopToken, true);
+      return;
+    }
     if (sess.lastReply) {
       const token = loopToken;
       setState('speaking');
@@ -373,6 +411,20 @@
     const finished = sess;
     sess = null;
     setState('idle');
+    if (finished.mode === 'vocab') {
+      clearTimeout(finished.vocab.timer);
+      if (!finished.vocab.results.length) { renderHome(); show('home'); return; }
+      const rec = {
+        type: 'vocab', id: finished.id, start: finished.start, end: finished.end, dir: finished.vocab.dir,
+        cat: finished.vocab.cat, startLevel: finished.startLevel, endLevel: finished.endLevel, turns: [], results: finished.vocab.results
+      };
+      sessions.push(rec);
+      while (sessions.length > MAX_SESSIONS) sessions.shift();
+      save(STORE.sessions, sessions);
+      renderHome();
+      openReport(rec.id);
+      return;
+    }
     if (finished.turns.length) {
       const record = {
         id: finished.id, start: finished.start, end: finished.end, theme: finished.theme,
@@ -395,6 +447,12 @@
      De beurt is pas klaar als de leerder langer zwijgt dan de ingestelde denkpauze. Hoelang de app
      wacht voordat de leerder begint te spreken, is onbeperkt. */
   let turnState = null;
+
+  /* Denkpauze in ms. Bij de woordentraining (losse woorden) hoogstens 1,5 s, anders wordt het traag. */
+  function pauseMsNow() {
+    const ms = Math.round((settings.pause || DEFAULTS.pause) * 1000);
+    return sess && sess.mode === 'vocab' ? Math.min(ms, 1500) : ms;
+  }
 
   function listen(token) {
     if (!sess || token !== loopToken) return;
@@ -460,7 +518,7 @@
     $('talk-meter-wrap').classList.remove('hidden');
     ensureMic().then(m => {
       if (!sess || token !== loopToken) return;
-      vad = { token, rate: m.rate, det: RP.createVad({ sampleRate: m.rate, pauseMs: Math.round((settings.pause || DEFAULTS.pause) * 1000) }) };
+      vad = { token, rate: m.rate, det: RP.createVad({ sampleRate: m.rate, pauseMs: pauseMsNow() }) };
     }).catch(e => {
       if (!sess || token !== loopToken) return;
       whisperBroken = true;
@@ -515,7 +573,7 @@
       const fd = new FormData();
       fd.append('file', new Blob([wavBytes], { type: 'audio/wav' }), 'zin.wav');
       fd.append('model', settings.whisperModel || DEFAULTS.whisperModel);
-      fd.append('language', 'fr');
+      fd.append('language', listenLang);
       fd.append('response_format', 'json');
       fd.append('temperature', '0');
       const ctrl = new AbortController();
@@ -537,7 +595,7 @@
           await sleep(isFinite(ra) ? Math.min(ra, 20) * 1000 : 3000 * (attempt + 1));
           continue;
         }
-        if (!res.ok) { lastErr = new Error('Serverfout ' + res.status); await sleep(1200 * (attempt + 1)); continue; }
+        if (!res.ok) { lastErr = new Error('Serverfout ' + res.status); if (attempt < 2) await sleep(1200 * (attempt + 1)); continue; }
         const data = await res.json();
         return (data && typeof data.text === 'string') ? data.text : '';
       } catch (e) {
@@ -545,7 +603,7 @@
         if (e.fatal) throw e;
         lastErr = e.name === 'AbortError' ? new Error('Geen antwoord binnen de tijd (verbinding?).') : e;
         if (!navigator.onLine) lastErr = new Error('Geen internetverbinding.');
-        await sleep(1200 * (attempt + 1));
+        if (attempt < 2) await sleep(1200 * (attempt + 1));
       }
     }
     throw lastErr || new Error('Onbekende fout.');
@@ -578,13 +636,14 @@
 
   function startRecognizer(t) {
     if (t.done || !sess || t.token !== loopToken) return;
-    const pauseMs = Math.round((settings.pause || DEFAULTS.pause) * 1000);
+    const pauseMs = pauseMsNow();
     const r = new SR();
     rec = r;
-    r.lang = 'fr-FR';
+    r.lang = listenLang === 'nl' ? 'nl-BE' : 'fr-FR';
     r.interimResults = true;
     r.continuous = true;
     r.maxAlternatives = 1;
+    r.onstart = () => { if (state === 'error') setState('listening'); };
     let retryDelay = 250;
     let fatal = false;
 
@@ -642,6 +701,7 @@
   }
 
   async function handleUtterance(text, token) {
+    if (sess && sess.mode === 'vocab') return vocabAnswer(text, token);
     const cmd = RP.detectCommand(text);
     if (cmd === 'stop') return stopSession();
     if (cmd === 'pause') return pauseSession();
@@ -679,7 +739,7 @@
     setState('thinking');
     const isStart = userContent === '[START]';
     const isMeta = /^\[[A-Z_]+\]$/.test(userContent);   // [START], [JOUW_BEURT], [MIJN_BEURT]: geen beurt van de leerder
-    const messages = [{ role: 'system', content: RP.buildSystemPrompt(levelState.level, sess.theme, { correctionSpoken: settings.speakCorrection !== 'uit', persona: settings.genderMain, style: sess.style, humor: settings.humor }) }]
+    const messages = [{ role: 'system', content: RP.buildSystemPrompt(levelState.level, sess.theme, { correctionSpoken: settings.speakCorrection !== 'uit', persona: settings.genderMain, style: sess.style, humor: settings.humor, context: sess.context, translate: settings.showTranslation !== false }) }]
       .concat(sess.history.slice(-2 * MAX_HISTORY_TURNS))
       .concat([{ role: 'user', content: userContent }]);
 
@@ -703,18 +763,21 @@
     if (!sess || token !== loopToken) return;
 
     sess.history.push({ role: 'user', content: userContent });
-    sess.history.push({ role: 'assistant', content: JSON.stringify({ correctie: parsed.correctie, uitleg: parsed.uitleg, antwoord: parsed.antwoord, score: parsed.score }) });
+    sess.history.push({ role: 'assistant', content: JSON.stringify({ correctie: parsed.correctie, uitleg: parsed.uitleg, antwoord: parsed.antwoord, vertaling: parsed.vertaling, score: parsed.score, leerwoorden: parsed.leerwoorden }) });
     sess.lastReply = parsed.antwoord;
 
     const levelBefore = levelState.level;
     if (isMeta) {
-      renderAppOnlyTurn(parsed.antwoord);
+      renderAppOnlyTurn(parsed.antwoord, parsed.vertaling);
     } else {
+      const added = settings.collectWords !== false ? addMyWords(parsed.leerwoorden) : [];
       sess.turns.push({
         user: userContent, correctie: parsed.correctie, uitleg: parsed.uitleg,
-        antwoord: parsed.antwoord, score: parsed.score, level: levelBefore, t: Date.now()
+        antwoord: parsed.antwoord, vertaling: parsed.vertaling, score: parsed.score, level: levelBefore, t: Date.now(),
+        leerwoorden: added
       });
       fillTurn(turnEl, parsed);
+      if (added.length) addSys('＋ In je woordentraining: ' + added.map(w => `${RPV.cleanFr(w.fr)} (${w.nl})`).join(', '));
     }
 
     let announce = '';
@@ -749,6 +812,436 @@
     if (token === loopToken) listen(token);
   }
 
+  /* ---------- Woordentraining ---------- */
+
+  const W = window.RP_WOORDEN || { cats: [], items: [] };
+  let vocabStore = load(STORE.vocab, {});
+  if (!vocabStore || typeof vocabStore !== 'object') vocabStore = {};
+  let myWords = load(STORE.mywords, []);
+  if (!Array.isArray(myWords)) myWords = [];
+  let exampleCache = load(STORE.examples, {});
+  if (!exampleCache || typeof exampleCache !== 'object') exampleCache = {};
+  const MY_CAT = window.RPV ? RPV.MY_CAT : 99;
+  function allItems() { return W.items.concat(myWords); }
+  const isOkResult = r => (window.RPV ? RPV.isOk(r) : r.kind === 'correct' || r.kind === 'almost');
+
+  /* Woorden uit een gesprek toevoegen aan de woordentraining (richting Nederlands → Frans, meteen te herhalen).
+     Staat het woord al in het brondocument of bij je eigen woorden, dan komt dat woord terug in de herhaling. */
+  function addMyWords(list) {
+    if (!window.RPV || !Array.isArray(list) || !list.length) return [];
+    const now = Date.now();
+    const added = [];
+    list.forEach(w => {
+      const key = RPV.norm(RPV.cleanFr(w.fr));
+      if (!key || key.length < 2) return;
+      let item = allItems().find(it => RPV.frVariants(it).some(v => RPV.norm(v.text) === key));
+      if (!item) {
+        item = { id: 'p-' + now.toString(36) + '-' + myWords.length, fr: w.fr, nl: w.nl, lvl: levelState.level, cat: MY_CAT,
+          note: 'Uit je gesprek van ' + new Date(now).toLocaleDateString('nl-BE'), frAlt: [], nlAlt: [] };
+        myWords.push(item);
+      }
+      const st = vocabStore[RPV.key(item, 'nf')];
+      vocabStore[RPV.key(item, 'nf')] = { box: 1, due: now, ok: st ? st.ok : 0, ko: (st ? st.ko : 0) + 1, last: now };
+      added.push({ fr: item.fr, nl: item.cat === MY_CAT ? item.nl : RPV.cleanNl(item.nl) });
+    });
+    while (myWords.length > 500) myWords.shift();
+    save(STORE.mywords, myWords);
+    save(STORE.vocab, vocabStore);
+    return added;
+  }
+  let listenLang = 'fr';     // taal waarin geluisterd wordt: 'fr' of 'nl'
+  const PRAISE = ['Exact !', 'Très bien !', 'Parfait !', 'Bravo !', "Oui, c'est ça !"];
+
+  function catTitle(nr) {
+    if (nr === MY_CAT) return 'Uit je gesprekken';
+    const c = W.cats.find(x => x.nr === nr); return c ? c.titel : "Alle thema's";
+  }
+  /* Op het scherm: met verduidelijking tussen haakjes ("de neef (kind van oom of tante)"). Uitgesproken: zonder. */
+  function askedText(cur) { return cur.dir === 'fn' ? RPV.cleanFr(cur.item.fr) : RPV.displayNl(cur.item.nl); }
+  function expectedText(cur) { return cur.dir === 'fn' ? RPV.cleanNl(cur.item.nl) : RPV.cleanFr(cur.item.fr); }
+  function expectedDisplay(cur) { return cur.dir === 'fn' ? RPV.displayNl(cur.item.nl) : RPV.cleanFr(cur.item.fr); }
+
+  function fillVocabSelects() {
+    const cat = $('sel-vcat');
+    cat.innerHTML = '';
+    [{ nr: 0, titel: "Alle thema's" }, { nr: MY_CAT, titel: `Uit je gesprekken (${myWords.length})` }].concat(W.cats).forEach(c => {
+      const o = el('option', null, c.nr && c.nr !== MY_CAT ? `${c.nr}. ${c.titel}` : c.titel);
+      o.value = String(c.nr);
+      cat.appendChild(o);
+    });
+    cat.value = String(settings.vocabCat || 0);
+    $('sel-vdir').value = settings.vocabDir || 'fn';
+    $('sel-vcount').value = String(settings.vocabCount || 20);
+    $('sel-mode').value = settings.mode === 'woorden' ? 'woorden' : 'gesprek';
+    applyMode();
+  }
+  function applyMode() {
+    const voc = $('sel-mode').value === 'woorden';
+    $('conv-opts').classList.toggle('hidden', voc);
+    $('vocab-opts').classList.toggle('hidden', !voc);
+    $('btn-start').textContent = voc ? '▶ Start woordentraining' : '▶ Start gesprek';
+    updateVocabInfo();
+  }
+  function updateVocabInfo() {
+    const info = $('vocab-info');
+    if (!info || !window.RPV) return;
+    const myOpt = $('sel-vcat').querySelector(`option[value="${MY_CAT}"]`);
+    if (myOpt) myOpt.textContent = `Uit je gesprekken (${myWords.length})`;
+    const sm = RPV.summary(allItems(), vocabStore, { cat: parseInt($('sel-vcat').value, 10) || 0, dir: $('sel-vdir').value, level: levelState.level });
+    info.textContent = `Niveau ${levelState.level}: ${sm.total} woorden · ${sm.due} te herhalen · ${sm.fresh} nieuw · ${sm.known} goed gekend`;
+  }
+
+  function startVocab() {
+    let dir = settings.vocabDir;
+    const hasNl = !!pickNlVoice();
+    let forced = false;
+    if (!hasNl && dir !== 'fn' && settings.context === 'auto') {
+      if (dir === 'nf') {
+        alert('Voor Nederlands → Frans in de auto is een Nederlandse stem nodig: Camille moet het woord kunnen uitspreken. Installeer een Nederlandse stem (Tekst-naar-spraak-uitvoer) of kies Frans → Nederlands.');
+        return false;
+      }
+      dir = 'fn'; forced = true;
+    }
+    const list = RPV.select(allItems(), vocabStore, { count: settings.vocabCount, cat: settings.vocabCat, dir, level: levelState.level });
+    if (!list.length) { alert(settings.vocabCat === MY_CAT ? 'Nog geen woorden uit je gesprekken. Ze komen erbij wanneer je in een gesprek een woord niet kent of fout gebruikt.' : 'Geen woorden gevonden voor deze keuze.'); return false; }
+    sess.mode = 'vocab';
+    sess.vocab = { list, i: 0, results: [], dir, cat: settings.vocabCat, attempt: 1, hintGiven: false, phase: 'ask', el: null, timer: null, forced, hasNl };
+    return true;
+  }
+
+  async function vocabIntro(token) {
+    const v = sess.vocab;
+    if (v.forced) addSys('Geen Nederlandse stem gevonden: in de auto alleen Frans → Nederlands.');
+    if (!v.hasNl && v.dir !== 'fn') addSys('Geen Nederlandse stem gevonden: het Nederlandse woord staat alleen op het scherm.');
+    const intro = {
+      fn: 'On commence ! Je dis un mot en français, tu le traduis en néerlandais.',
+      nf: "On commence ! Je dis un mot en néerlandais, tu le traduis en français, avec l'article.",
+      mix: "On commence ! Je dis un mot en français ou en néerlandais, tu le traduis. En français, avec l'article."
+    }[v.dir];
+    setState('speaking');
+    await speak(intro, token, 'fr', 'main');
+    if (token !== loopToken) return;
+    vocabAsk(token);
+  }
+
+  function renderVocabCard(cur) {
+    const t = makeTurnShell();
+    const label = cur.dir === 'fn' ? '🇫🇷 Vertaal naar het Nederlands' : '🇳🇱 Vertaal naar het Frans (met lidwoord)';
+    const b = block('blk-ask', label, askedText(cur));
+    b.appendChild(el('div', 'why', `${catTitle(cur.item.cat)} · ${cur.item.lvl}`));
+    t.appendChild(b);
+    scrollLog();
+    return t;
+  }
+  function addCardBlock(card, b) { card.appendChild(b); scrollLog(); }
+
+  function speakWord(cur, token) {
+    if (cur.dir === 'fn') return speak(RPV.spokenFr(cur.item), token, 'fr', 'main');
+    if (pickNlVoice()) return speak(RPV.cleanNl(cur.item.nl).replace(/ \/ /g, ', '), token, 'nl', 'main');
+    return Promise.resolve();                       // geen Nederlandse stem: alleen op het scherm
+  }
+
+  function listenFor(cur, token) {
+    listenLang = cur.dir === 'fn' ? 'nl' : 'fr';
+    listen(token);
+  }
+
+  async function vocabAsk(token, again) {
+    const v = sess && sess.vocab;
+    if (!v || token !== loopToken) return;
+    clearTimeout(v.timer);
+    if (v.i >= v.list.length) return vocabFinish(token);
+    const cur = v.list[v.i];
+    if (!again) { v.attempt = 1; v.hintGiven = false; v.el = renderVocabCard(cur); prefetchExample(cur); }
+    v.phase = 'ask';
+    updateMeta();
+    setState('speaking');
+    await speakWord(cur, token);
+    if (token !== loopToken) return;
+    listenFor(cur, token);
+  }
+
+  async function vocabHint(cur, token) {
+    const v = sess.vocab;
+    const h = RPV.hint(cur.item, cur.dir);
+    if (!v.hintGiven) { v.hintGiven = true; addCardBlock(v.el, block('blk-hint', '💡 Hint', h.nl)); }
+    setState('speaking');
+    await speak(h.fr, token, 'fr', 'corr');
+    if (token !== loopToken) return;
+    listenFor(cur, token);
+  }
+
+  async function vocabAnswer(text, token) {
+    const v = sess.vocab;
+    const cur = v.list[v.i];
+    if (!cur) return;
+    if (v.phase === 'repeat') return vocabRepeatHeard(text, token);
+    const res = RPV.check(cur.item, cur.dir, text);
+    if (res.result === 'correct' || res.result === 'almost') return vocabResolve(token, res.result, text, res);
+    const cmd = RPV.detectCommand(text);
+    if (cmd === 'stop') return vocabFinish(token, true);
+    if (cmd === 'pause') return pauseSession();
+    if (cmd === 'repeat' || cmd === 'slower') {
+      if (cmd === 'slower') { settings.rate = Math.max(0.6, Math.round((settings.rate - 0.1) * 100) / 100); save(STORE.settings, settings); }
+      return vocabAsk(token, true);
+    }
+    if (cmd === 'hint') return vocabHint(cur, token);
+    if (cmd === 'skip') return vocabResolve(token, 'skip', '', res);
+    if (res.result === 'article_missing' || res.result === 'article_wrong') return vocabResolve(token, 'article', text, res);
+    if (settings.vocabSynonyms !== false) {
+      setState('thinking', 'Even nakijken…');
+      const j = await judgeAnswer(cur, text);
+      if (!sess || token !== loopToken) return;
+      if (j && j.ok) return vocabResolve(token, 'synonym', text, Object.assign({}, res, { note: j.note }));
+    }
+    if (v.attempt === 1) {
+      v.attempt = 2;
+      addCardBlock(v.el, block('blk-user', '🎙 Jouw antwoord', text));
+      const h = RPV.hint(cur.item, cur.dir);
+      v.hintGiven = true;
+      addCardBlock(v.el, block('blk-corr', '✗ Niet juist – nog één kans', h.nl));
+      setState('speaking');
+      await speak('Non. ' + h.fr, token, 'fr', 'corr');
+      if (token !== loopToken) return;
+      return listenFor(cur, token);
+    }
+    return vocabResolve(token, 'wrong', text, res);
+  }
+
+  async function vocabResolve(token, kind, heard, res) {
+    const v = sess.vocab;
+    const cur = v.list[v.i];
+    const correct = kind === 'correct' || kind === 'almost' || kind === 'synonym';
+    RPV.update(vocabStore, cur.item, cur.dir, correct, Date.now());
+    save(STORE.vocab, vocabStore);
+    const expected = expectedText(cur);
+    v.results.push({
+      id: cur.item.id, fr: RPV.cleanFr(cur.item.fr), nl: RPV.cleanNl(cur.item.nl), dir: cur.dir, kind,
+      detail: kind === 'article' ? res.result : null, form: res.expected || expected, heard, attempts: v.attempt, hint: v.hintGiven, note: cur.item.note || '',
+      judge: kind === 'synonym' ? (res.note || '') : undefined
+    });
+    if (heard) addCardBlock(v.el, block('blk-user', '🎙 Jouw antwoord', heard));
+    if (kind === 'synonym') {
+      const c = el('div', 'blk blk-ok', `✓ Ook goed. In de lijst staat: ${expected}`);
+      if (res.note) c.appendChild(el('div', 'why', res.note));
+      addCardBlock(v.el, c);
+    } else if (correct) {
+      addCardBlock(v.el, el('div', 'blk blk-ok', kind === 'almost' ? `✓ Bijna juist: ${res.expected}` : '✓ Juist'));
+    } else if (kind === 'article') {
+      const c = block('blk-corr', '✎ Let op het lidwoord', res.expected);
+      c.appendChild(el('div', 'why', res.result === 'article_missing' ? 'Juist woord, maar zonder lidwoord.' : 'Juist woord, maar verkeerd lidwoord.'));
+      addCardBlock(v.el, c);
+    } else {
+      const c = block('blk-corr', kind === 'skip' ? '✎ Antwoord' : '✎ Juiste antwoord', expectedDisplay(cur));
+      if (cur.item.note) c.appendChild(el('div', 'why', cur.item.note));
+      addCardBlock(v.el, c);
+    }
+    updateMeta();
+    setState('speaking');
+    if (correct) {
+      const praise = kind === 'almost' ? 'Presque parfait, mais oui !' : kind === 'synonym' ? 'Oui, ça marche aussi !' : PRAISE[v.results.length % PRAISE.length];
+      await speak(praise, token, 'fr', 'main');
+      if (token !== loopToken) return;
+      return vocabAfterWord(token);
+    }
+    if (kind === 'article') await speak("Attention à l'article : " + res.expected + '.', token, 'fr', 'corr');
+    else if (cur.dir === 'nf') await speak('La bonne réponse : ' + RPV.spokenFr(cur.item) + '.', token, 'fr', 'corr');
+    else {
+      await speak('La bonne réponse :', token, 'fr', 'corr');
+      if (token !== loopToken) return;
+      if (pickNlVoice()) await speak(expected, token, 'nl', 'corr');
+    }
+    if (token !== loopToken) return;
+    /* Nazeggen (telt niet mee): alleen bij Franse antwoorden, voor de uitspraak */
+    if (cur.dir === 'nf') {
+      v.phase = 'repeat';
+      addCardBlock(v.el, el('p', 'sys', 'Zeg het juiste antwoord na (telt niet mee)…'));
+      listenFor(cur, token);
+      startRepeatWindow(token);
+    } else {
+      vocabAfterWord(token);
+    }
+  }
+
+  function speechStarted() {
+    return !!((vad && vad.det.phase === 'speech') || (turnState && !turnState.done && (turnState.parts.length || turnState.current || turnState.interim)));
+  }
+  /* Wie niets nazegt, gaat na 6 seconden vanzelf naar het volgende woord. */
+  function startRepeatWindow(token) {
+    const v = sess.vocab;
+    clearTimeout(v.timer);
+    const check = () => {
+      if (!sess || sess.vocab !== v || token !== loopToken || v.phase !== 'repeat') return;
+      if (state === 'listening' && !speechStarted()) { stopRecognition(); v.phase = 'done'; vocabAfterWord(token); }
+      else v.timer = setTimeout(check, 1500);       // spreekt nog of wordt verwerkt
+    };
+    v.timer = setTimeout(check, 6000);
+  }
+
+  async function vocabRepeatHeard(text, token) {
+    const v = sess.vocab;
+    const cur = v.list[v.i];
+    clearTimeout(v.timer);
+    v.phase = 'done';
+    const cmd = RPV.detectCommand(text);
+    const r = RPV.check(cur.item, 'nf', text);
+    if (r.result !== 'correct' && r.result !== 'almost') {
+      if (cmd === 'stop') return vocabFinish(token, true);
+      if (cmd === 'pause') return pauseSession();
+    }
+    addCardBlock(v.el, block('blk-user', '🔁 Nagezegd', text));
+    if (r.result === 'correct' || r.result === 'almost') {
+      setState('speaking');
+      await speak('Très bien !', token, 'fr', 'main');
+      if (token !== loopToken) return;
+    }
+    vocabAfterWord(token);
+  }
+
+  /* ---------- Fase 2: voorbeeldzin en synoniemcontrole (taalmodel) ---------- */
+
+  const withTimeout = (p, ms) => Promise.race([p, sleep(ms).then(() => null)]);
+
+  function parseJsonObj(raw) {
+    try { const o = JSON.parse(RP.stripFences(raw)); return o && typeof o === 'object' ? o : null; } catch (e) { return null; }
+  }
+
+  /* Voorbeeldzin: één keer per woord gemaakt en bewaard; wordt al opgehaald terwijl de leerder antwoordt. */
+  function prefetchExample(cur) {
+    if (settings.vocabExamples === false || !settings.apiKey) return;
+    const id = cur.item.id;
+    if (exampleCache[id]) { cur.examplePromise = Promise.resolve(exampleCache[id]); return; }
+    const lvl = RP.LEVELS.includes(cur.item.lvl) ? cur.item.lvl : levelState.level;
+    const maxWords = lvl === 'A1' || lvl === 'A2' ? 8 : lvl === 'B1' ? 12 : 15;
+    cur.examplePromise = callGroq([
+      { role: 'system', content: 'You write example sentences for a French vocabulary trainer for adult Dutch-speaking (Flemish) learners. Reply with one JSON object only.' },
+      { role: 'user', content: `French: "${RPV.spokenFr(cur.item)}" (Dutch: "${RPV.cleanNl(cur.item.nl)}"). CEFR level: ${lvl}. Write ONE short, natural sentence in contemporary spoken French about everyday adult life that uses this word or expression with exactly this meaning (at most ${maxWords} words). Return {"fr": "the sentence", "nl": "a natural Flemish Dutch translation"}.` }
+    ], 300, 1).then(raw => {
+      const o = parseJsonObj(raw);
+      if (!o || typeof o.fr !== 'string' || !o.fr.trim() || o.fr.length > 220) return null;
+      const ex = { fr: o.fr.trim(), nl: typeof o.nl === 'string' ? o.nl.trim() : '' };
+      exampleCache[id] = ex;
+      const ids = Object.keys(exampleCache);
+      if (ids.length > 1500) delete exampleCache[ids[0]];
+      save(STORE.examples, exampleCache);
+      return ex;
+    }).catch(() => null);
+  }
+
+  /* Synoniemcontrole: is een door de app afgekeurd antwoord toch een juiste vertaling? */
+  async function judgeAnswer(cur, text) {
+    if (!settings.apiKey) return null;
+    const nf = cur.dir === 'nf';
+    const prompt = nf
+      ? `The learner had to translate the Dutch "${RPV.displayNl(cur.item.nl)}" into French. Expected answer: "${RPV.spokenFr(cur.item)}". The learner said (automatic speech transcription; ignore punctuation, capitals and accents): "${text}". Is this a correct French translation with the same meaning in this context? A synonym or equivalent expression is fine. For nouns, an article (le, la, l', les, un, une) with the correct gender is REQUIRED; a missing or wrong article makes it incorrect.`
+      : `The learner had to translate the French "${RPV.spokenFr(cur.item)}" into Dutch. Expected answer: "${RPV.displayNl(cur.item.nl)}". The learner said (automatic speech transcription; ignore punctuation and capitals): "${text}". Is this a correct Dutch translation with the same meaning in this context? A synonym or equivalent expression (also Flemish usage) is fine. The Dutch article (de/het) does not matter.`;
+    const raw = await withTimeout(callGroq([
+      { role: 'system', content: 'You check answers in a French–Dutch vocabulary trainer. Be fair but strict: only accept answers that a teacher would accept. Reply with one JSON object only.' },
+      { role: 'user', content: prompt + ' Return {"ok": true or false, "note": "very short explanation in Dutch, max 12 words"}.' }
+    ], 200, 1).catch(() => null), 6000);
+    const o = raw && parseJsonObj(raw);
+    if (!o || typeof o.ok !== 'boolean') return null;
+    return { ok: o.ok, note: typeof o.note === 'string' ? o.note.trim().slice(0, 140) : '' };
+  }
+
+  /* Na elk woord: eventueel de voorbeeldzin (hoogstens 3 s wachten als ze nog niet klaar is), dan het volgende woord. */
+  async function vocabAfterWord(token) {
+    const v = sess && sess.vocab;
+    if (!v || token !== loopToken) return;
+    const cur = v.list[v.i];
+    if (settings.vocabExamples !== false && cur && cur.examplePromise) {
+      setState('thinking', 'Voorbeeldzin…');
+      const ex = await withTimeout(cur.examplePromise, 3000);
+      if (!sess || token !== loopToken) return;
+      if (ex) {
+        const b = block('blk-app', '💬 Voorbeeld', ex.fr);
+        addTranslation(b, ex.nl);
+        addCardBlock(v.el, b);
+        const last = v.results[v.results.length - 1];
+        if (last && last.id === cur.item.id) last.example = ex;
+        setState('speaking');
+        await speak(ex.fr, token, 'fr', 'main');
+        if (token !== loopToken) return;
+      }
+    }
+    vocabNext(token);
+  }
+
+  function vocabNext(token) {
+    const v = sess && sess.vocab;
+    if (!v || token !== loopToken) return;
+    clearTimeout(v.timer);
+    v.i++;
+    vocabAsk(token);
+  }
+
+  async function vocabFinish(token, early) {
+    const v = sess && sess.vocab;
+    if (!v) return;
+    clearTimeout(v.timer);
+    const n = v.results.length;
+    if (!early && n) {
+      const ok = v.results.filter(isOkResult).length;
+      const mood = ok / n >= 0.8 ? 'Bravo !' : ok / n >= 0.5 ? 'Pas mal du tout !' : 'Courage, ça viendra !';
+      setState('speaking');
+      await speak(`C'est fini ! Tu as ${ok} sur ${n}. ${mood}`, token, 'fr', 'main');
+    }
+    if (sess && sess.vocab === v) stopSession();
+  }
+
+  /* ---------- Verslag van een woordentraining ---------- */
+
+  function renderVocabReport(s, body) {
+    const ok = s.results.filter(isOkResult).length;
+    const n = s.results.length;
+    const sum = el('div', 'card report-summary');
+    sum.appendChild(el('b', null, fmtDate(s.start)));
+    sum.appendChild(el('span', null, `Woordentraining · ${RPV.DIRS[s.dir]} · ${catTitle(s.cat)}`));
+    sum.appendChild(el('span', null, `Score: ${ok}/${n} (${n ? Math.round(100 * ok / n) : 0}%) · ${minutes(s.end - s.start)} min · niveau ${s.startLevel}`));
+    const sm = RPV.summary(allItems(), vocabStore, { cat: s.cat, dir: s.dir, level: s.startLevel });
+    sum.appendChild(el('span', 'muted small', `Voortgang: ${sm.known} van ${sm.total} woorden goed gekend`));
+    body.appendChild(sum);
+
+    const asked = r => (r.dir === 'fn' ? r.fr : r.nl);
+    const answer = r => (r.dir === 'fn' ? r.nl : r.form || r.fr);
+    const section = (title, rows, fn) => {
+      if (!rows.length) return;
+      body.appendChild(el('p', 'report-section-title', title));
+      const ul = el('ul', 'corr-list');
+      rows.forEach(r => { const li = el('li'); fn(li, r); ul.appendChild(li); });
+      body.appendChild(ul);
+    };
+    section('Om te herhalen', s.results.filter(r => r.kind === 'wrong' || r.kind === 'skip'), (li, r) => {
+      li.appendChild(el('div', null, `${asked(r)} → ${answer(r)}`));
+      if (r.heard) li.appendChild(el('div', 'old', r.heard));
+      if (r.note) li.appendChild(el('div', 'muted small', r.note));
+      if (r.example) li.appendChild(el('div', 'muted small', `💬 ${r.example.fr}` + (r.example.nl ? ` – ${r.example.nl}` : '')));
+    });
+    section('Ook goed gerekend (synoniem)', s.results.filter(r => r.kind === 'synonym'), (li, r) => {
+      li.appendChild(el('div', null, `${asked(r)} → jij: ${r.heard}`));
+      li.appendChild(el('div', 'muted small', `In de lijst: ${answer(r)}` + (r.judge ? ` · ${r.judge}` : '')));
+    });
+    section('Let op het lidwoord', s.results.filter(r => r.kind === 'article'), (li, r) => {
+      li.appendChild(el('div', null, `${r.nl} → ${r.form}`));
+      if (r.heard) li.appendChild(el('div', 'old', r.heard));
+    });
+    section('Alle woorden', s.results, (li, r) => {
+      const mark = r.kind === 'correct' ? '✓' : (r.kind === 'almost' || r.kind === 'synonym') ? '≈' : '✗';
+      li.appendChild(el('div', null, `${mark}  ${asked(r)} → ${answer(r)}`));
+    });
+  }
+
+  function vocabReportText(s) {
+    const ok = s.results.filter(isOkResult).length;
+    const lines = [`RoutePratique – woordentraining ${fmtDate(s.start)}`, `${RPV.DIRS[s.dir]} · ${catTitle(s.cat)} · score ${ok}/${s.results.length}`, ''];
+    s.results.forEach((r, i) => {
+      const q = r.dir === 'fn' ? r.fr : r.nl, a = r.dir === 'fn' ? r.nl : (r.form || r.fr);
+      const mark = { correct: '✓', almost: '≈', synonym: '≈ synoniem', article: '✗ lidwoord', wrong: '✗', skip: '–' }[r.kind] || '';
+      lines.push(`${i + 1}. ${q} → ${a}  ${mark}${r.heard && r.kind !== 'correct' ? '  (jij: ' + r.heard + ')' : ''}`);
+    });
+    return lines.join('\n');
+  }
+
   /* ---------- Weergave gesprek ---------- */
 
   function compactOlder() {
@@ -772,6 +1265,15 @@
     b.appendChild(el('div', 'txt', text));
     return b;
   }
+  /* Antwoordblok van Camille, met de Nederlandse vertaling eronder (als die aanstaat). */
+  function addTranslation(b, nl) {
+    if (nl && settings.showTranslation !== false) b.appendChild(el('div', 'nl', nl));
+  }
+  function appBlock(text, nl) {
+    const b = block('blk-app', '🔊 Antwoord', text);
+    addTranslation(b, nl);
+    return b;
+  }
   function renderLiveTurn(userText) {
     const t = makeTurnShell();
     t.appendChild(block('blk-user', '🎙 Jouw zin', userText));
@@ -792,22 +1294,23 @@
     }
     return out;
   }
-  function fillAppBlock(turnEl, text) {
+  function fillAppBlock(turnEl, text, nl) {
     const p = turnEl.querySelector('[data-pending]');
     if (!p) return;
     if (text === null) { p.remove(); return; }
     p.querySelector('.txt').textContent = text;
+    addTranslation(p, nl);
     delete p.dataset.pending;
   }
   function fillTurn(turnEl, parsed) {
     const pending = turnEl.querySelector('[data-pending]');
     correctionBlocks(parsed).forEach(b => turnEl.insertBefore(b, pending));
-    fillAppBlock(turnEl, parsed.antwoord);
+    fillAppBlock(turnEl, parsed.antwoord, parsed.vertaling);
     scrollLog();
   }
-  function renderAppOnlyTurn(text) {
+  function renderAppOnlyTurn(text, nl) {
     const t = makeTurnShell();
-    t.appendChild(block('blk-app', '🔊 Antwoord', text));
+    t.appendChild(appBlock(text, nl));
     scrollLog();
   }
   function addSys(text) {
@@ -830,7 +1333,8 @@
     w.classList.toggle('hidden', warn.length === 0);
 
     const totalMin = sessions.reduce((a, s) => a + minutes(s.end - s.start), 0);
-    const totalTurns = sessions.reduce((a, s) => a + s.turns.length, 0);
+    const totalTurns = sessions.reduce((a, s) => a + s.turns.length + (s.results ? s.results.length : 0), 0);
+    updateVocabInfo();
     const stats = $('home-stats');
     stats.innerHTML = '';
     [[sessions.length, 'sessies'], [totalMin, 'minuten'], [totalTurns, 'beurten']].forEach(([n, l]) => {
@@ -868,11 +1372,20 @@
     const list = $('history-list');
     list.innerHTML = '';
     if (!sessions.length) {
-      list.appendChild(el('p', 'muted', 'Nog geen sessies. Na een gesprek verschijnt hier het verslag.'));
+      list.appendChild(el('p', 'muted', 'Nog geen sessies. Na een gesprek of woordentraining verschijnt hier het verslag.'));
       return;
     }
     sessions.slice().reverse().forEach(s => {
       const c = el('div', 'card hist-item');
+      if (s.type === 'vocab') {
+        const ok = s.results.filter(isOkResult).length;
+        c.appendChild(el('b', null, fmtDate(s.start)));
+        c.appendChild(el('span', 'muted small', `Woordentraining · ${RPV.DIRS[s.dir]} · ${catTitle(s.cat)}`));
+        c.appendChild(el('span', 'muted small', `${ok}/${s.results.length} juist · ${minutes(s.end - s.start)} min`));
+        c.addEventListener('click', () => openReport(s.id));
+        list.appendChild(c);
+        return;
+      }
       const nCorr = s.turns.filter(t => t.correctie).length;
       c.appendChild(el('b', null, fmtDate(s.start)));
       c.appendChild(el('span', 'muted small', `${RP.themeById(s.theme).nl} · ${minutes(s.end - s.start)} min · ${s.startLevel}→${s.endLevel}`));
@@ -889,6 +1402,7 @@
     currentReportId = id;
     const body = $('report-body');
     body.innerHTML = '';
+    if (s.type === 'vocab') { renderVocabReport(s, body); show('report'); return; }
 
     const sum = el('div', 'card report-summary');
     const nCorr = s.turns.filter(t => t.correctie).length;
@@ -915,18 +1429,27 @@
       body.appendChild(ul);
     }
 
+    const newWords = s.turns.flatMap(t => t.leerwoorden || []);
+    if (newWords.length) {
+      body.appendChild(el('p', 'report-section-title', 'Nieuw in je woordentraining'));
+      const ul = el('ul', 'corr-list');
+      newWords.forEach(w => { const li = el('li'); li.appendChild(el('div', null, `${RPV.cleanFr(w.fr)} – ${w.nl}`)); ul.appendChild(li); });
+      body.appendChild(ul);
+    }
+
     body.appendChild(el('p', 'report-section-title', 'Volledig gesprek'));
     s.turns.forEach(t => {
       const wrap = el('div', 'turn report-turn');
       wrap.appendChild(block('blk-user', '🎙 Jouw zin', t.user));
       correctionBlocks(t).forEach(b => wrap.appendChild(b));
-      wrap.appendChild(block('blk-app', '🔊 Antwoord', t.antwoord));
+      wrap.appendChild(appBlock(t.antwoord, t.vertaling));
       body.appendChild(wrap);
     });
     show('report');
   }
 
   function reportAsText(s) {
+    if (s.type === 'vocab') return vocabReportText(s);
     const lines = [
       `RoutePratique – ${fmtDate(s.start)}`,
       `Thema: ${RP.themeById(s.theme).nl} · ${minutes(s.end - s.start)} min · niveau ${s.startLevel} → ${s.endLevel}`,
@@ -936,6 +1459,8 @@
       lines.push(`${i + 1}. Jij: ${t.user}`);
       if (t.correctie) lines.push(`   Verbeterd: ${t.correctie}${t.uitleg ? ' (' + t.uitleg + ')' : ''}`);
       lines.push(`   Camille: ${t.antwoord}`);
+      if (t.vertaling) lines.push(`   (NL: ${t.vertaling})`);
+      if (t.leerwoorden && t.leerwoorden.length) lines.push(`   + woordentraining: ${t.leerwoorden.map(w => RPV.cleanFr(w.fr) + ' – ' + w.nl).join(', ')}`);
       lines.push('');
     });
     return lines.join('\n');
@@ -954,6 +1479,10 @@
     $('set-gender-corr').value = settings.genderCorr === 'f' ? 'f' : 'm';
     $('set-stt').value = settings.sttEngine === 'chrome' ? 'chrome' : 'whisper';
     $('set-humor').value = RP.HUMOR_LEVELS.includes(settings.humor) ? settings.humor : 'afentoe';
+    $('set-translate').checked = settings.showTranslation !== false;
+    $('set-vsyn').checked = settings.vocabSynonyms !== false;
+    $('set-vex').checked = settings.vocabExamples !== false;
+    $('set-collect').checked = settings.collectWords !== false;
     $('set-corr').value = ['uit', 'zin', 'uitleg'].includes(settings.speakCorrection) ? settings.speakCorrection : 'zin';
     updateCorrHint();
     $('set-pause').value = settings.pause;
@@ -982,6 +1511,10 @@
     settings.genderCorr = g('set-gender-corr');
     settings.sttEngine = $('set-stt').value === 'chrome' ? 'chrome' : 'whisper';
     settings.humor = RP.HUMOR_LEVELS.includes($('set-humor').value) ? $('set-humor').value : 'afentoe';
+    settings.showTranslation = $('set-translate').checked;
+    settings.vocabSynonyms = $('set-vsyn').checked;
+    settings.vocabExamples = $('set-vex').checked;
+    settings.collectWords = $('set-collect').checked;
     whisperBroken = false;
     const c = $('set-corr').value;
     settings.speakCorrection = ['uit', 'zin', 'uitleg'].includes(c) ? c : 'zin';
@@ -1011,6 +1544,8 @@
     }));
 
     $('btn-start').addEventListener('click', startSession);
+    $('sel-mode').addEventListener('change', () => { settings.mode = $('sel-mode').value; save(STORE.settings, settings); applyMode(); });
+    ['sel-vdir', 'sel-vcat'].forEach(id => $(id).addEventListener('change', updateVocabInfo));
     $('btn-pause').addEventListener('click', () => { if (state === 'paused') resumeSession(); else pauseSession(); });
     $('btn-stop').addEventListener('click', stopSession);
 
@@ -1079,13 +1614,18 @@
 
     $('btn-reset-all').addEventListener('click', () => {
       const lvl = $('set-level').value;
-      if (!confirm(`Opnieuw beginnen op niveau ${lvl}?\n\nAlle verslagen, statistieken en de niveaugeschiedenis worden definitief gewist. Je instellingen blijven behouden.`)) return;
+      if (!confirm(`Opnieuw beginnen op niveau ${lvl}?\n\nAlle verslagen, statistieken, de niveaugeschiedenis en je voortgang in de woordentraining (ook de woorden uit je gesprekken) worden definitief gewist. Je instellingen blijven behouden.`)) return;
       readSettingsForm();
       save(STORE.settings, settings);
       sessions = [];
       save(STORE.sessions, sessions);
       levelState = RP.newLevelState(lvl);
       save(STORE.level, levelState);
+      vocabStore = {};
+      save(STORE.vocab, vocabStore);
+      myWords = [];
+      save(STORE.mywords, myWords);
+      fillVocabSelects();
       renderHome();
       settingsMsg(`Alles gewist. Je begint opnieuw op niveau ${levelState.level}.`, 'ok');
     });
@@ -1109,6 +1649,8 @@
     }
     fillThemeSelect();
     fillStyleSelect();
+    fillVocabSelects();
+    $('sel-context').value = settings.context === 'auto' ? 'auto' : 'algemeen';
     bind();
     renderHome();
     if ('serviceWorker' in navigator) {

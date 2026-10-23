@@ -1,11 +1,13 @@
 /* RoutePratique – service worker: bewaart de app-bestanden, laat API-verkeer ongemoeid */
-const CACHE = 'routepratique-v1.8.0';
+const CACHE = 'routepratique-v2.1.0';
 const ASSETS = [
   './',
   './index.html',
   './style.css',
   './logic.js',
   './app.js',
+  './woorden.js',
+  './vocab.js',
   './manifest.json',
   './icons/icon-192.png',
   './icons/icon-512.png',

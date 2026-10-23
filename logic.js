@@ -86,7 +86,7 @@
   const HUMOR_LEVELS = ['uit', 'afentoe', 'veel'];
   const HUMOR_LABELS = { uit: 'Uit', afentoe: 'Af en toe', veel: 'Veel' };
   const HUMOR_COMMON = [
-    '- Humor must be light, warm and kind: playful exaggeration, gentle self-mockery, a wink at traffic jams, the weather, French or Belgian everyday quirks (fries, rain, bureaucracy, coffee), or the situation in the car.',
+    '- Humor must be light, warm and kind: playful exaggeration, gentle self-mockery, a wink at traffic jams, the weather, French or Belgian everyday quirks (fries, rain, bureaucracy, coffee), or everyday situations.',
     '- Adapt the humor to the level. A1-A2: very simple, obvious humor with frequent words (exaggeration, a funny comparison). B1 and higher: also wordplay, idioms and expressions, which are a learning opportunity in themselves.',
     '- The humor must be understandable without looking at a screen. If a joke relies on an expression, it may be followed by a very short French paraphrase.',
     '- Never joke about the learner\'s mistakes, accent or abilities. Never put humor in "correctie" or "uitleg". No sarcasm, no irony that could be misunderstood, nothing about politics, religion or appearance.',
@@ -110,10 +110,14 @@
     const male = !!(opts && opts.persona === 'm');
     const style = STYLES.includes(opts && opts.style) ? opts.style : 'afwisselend';
     const humor = HUMOR_LEVELS.includes(opts && opts.humor) ? opts.humor : 'afentoe';
+    const inCar = !!(opts && opts.context === 'auto');
+    const translate = !(opts && opts.translate === false);
     const p = LEVEL_PROFILE[level] || LEVEL_PROFILE.A2;
     const t = themeById(themeId);
     return [
-      'You are "Camille", a warm, patient French conversation partner for an adult Dutch-speaking (Flemish) learner who practises spoken French while driving a car.',
+      inCar
+        ? 'You are "Camille", a warm, patient French conversation partner for an adult Dutch-speaking (Flemish) learner who practises spoken French while driving a car.'
+        : 'You are "Camille", a warm, patient French conversation partner for an adult Dutch-speaking (Flemish) learner who practises spoken French. Do not assume where the learner is or what they are doing (do not assume they are driving); only refer to their situation if they mention it.',
       male
         ? 'Camille is a man here (Camille is a unisex name in French). When you talk about yourself, use masculine forms (je suis content, je suis allé, un partenaire).'
         : 'Camille is a woman here. When you talk about yourself, use feminine forms (je suis contente, je suis allée, une partenaire).',
@@ -141,7 +145,9 @@
         ? '- The app reads "correctie" aloud just before "antwoord". So in "antwoord" do NOT repeat or announce the correction; simply react to the content and continue the conversation. Do not lecture.'
         : '- Correct implicitly: in "antwoord", naturally reuse the correct form of what the learner got wrong (recast). Do not lecture.',
       '- Regularly create situations that make the learner use the grammar of the current level.',
-      '- The learner is driving: no lists, no spelling, no numbers to remember, nothing that requires looking at a screen.',
+      inCar
+        ? '- The learner is driving: no lists, no spelling, no numbers to remember, nothing that requires looking at a screen.'
+        : '- This is a spoken conversation: keep turns short and natural, no long lists.',
       '- If the learner seems lost, simplify, rephrase, or offer two options to choose from.',
       '- If the learner answers in Dutch, gently give the French way to say it and invite them to repeat it.',
       '',
@@ -158,7 +164,11 @@
       '- 0.1: hardly understandable, wrong language, or no real answer.',
       '',
       'OUTPUT: reply with ONE JSON object only, no other text:',
-      '{"correctie": string|null, "uitleg": string|null, "antwoord": string, "score": number|null}',
+      '{"correctie": string|null, "uitleg": string|null, "antwoord": string, "vertaling": string|null, "score": number|null, "leerwoorden": [{"fr": string, "nl": string}]}',
+      '"leerwoorden": at most 2 French words or short expressions the learner needs to learn from their LAST utterance: a word they did not know (said it in Dutch or English, talked around it, or asked how to say it) or a word they used wrongly (wrong word, false friend, wrong gender of a noun). NOT for grammar or conjugation mistakes. "fr": dictionary form (infinitive for verbs; nouns with definite article, and add (m.) or (f.) after a noun with l\'). "nl": Dutch translation (with de/het for nouns). Use [] when there is nothing to add, and always [] for bracketed messages.',
+      translate
+        ? '"vertaling": a natural, faithful Dutch (Flemish, nl-BE) translation of "antwoord", in the same register (tu → je/jij). Always fill it, also for [START] and other bracketed messages.'
+        : '"vertaling": always null.',
       START_RULES[style],
       'When the user message is [JOUW_BEURT], the learner wants you to ask the questions again: ask one question about the theme or about what was said; correctie, uitleg and score are null.',
       'When the user message is [MIJN_BEURT], the learner wants to ask the questions: say briefly and warmly that you are listening (for example "Vas-y, je t\'écoute !"), without asking a question; correctie, uitleg and score are null.'
@@ -210,7 +220,12 @@
     } else if (typeof obj.score === 'string' && obj.score.trim() !== '' && isFinite(Number(obj.score))) {
       score = Math.min(1, Math.max(0, Number(obj.score)));
     }
-    return { correctie, uitleg, antwoord, score };
+    const vertaling = typeof obj.vertaling === 'string' && obj.vertaling.trim() ? obj.vertaling.trim() : null;
+    const leerwoorden = (Array.isArray(obj.leerwoorden) ? obj.leerwoorden : [])
+      .filter(w => w && typeof w.fr === 'string' && typeof w.nl === 'string' && w.fr.trim() && w.nl.trim() && w.fr.length <= 60 && w.nl.length <= 80)
+      .slice(0, 3)
+      .map(w => ({ fr: w.fr.trim(), nl: w.nl.trim() }));
+    return { correctie, uitleg, antwoord, vertaling, score, leerwoorden };
   }
 
   const ADAPT = { upWindow: 6, upThreshold: 0.8, downWindow: 4, downThreshold: 0.35 };
@@ -369,7 +384,8 @@
 
   /* Whisper verzint bij stilte of ruis soms ondertitelzinnen. Die worden weggefilterd. */
   const HALLUCINATIONS = ['sous-titres', 'sous titres', 'sous-titrage', 'amara', "merci d'avoir regarde", 'abonnez-vous', 'abonnez vous',
-    'radio-canada', 'www.', '.com', 'merci de nous avoir suivis'];
+    'radio-canada', 'www.', '.com', 'merci de nous avoir suivis',
+    'ondertitel', 'bedankt voor het kijken', 'bedankt voor het luisteren', 'abonneer'];
   function cleanTranscript(text) {
     let t = String(text || '').trim().replace(/^["'«»\s]+|["'«»\s]+$/g, '');
     if (!/[a-z0-9À-ſ]/i.test(t)) return '';
