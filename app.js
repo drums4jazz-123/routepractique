@@ -2,7 +2,7 @@
 (function () {
   'use strict';
 
-  const VERSION = '2.2.0';
+  const VERSION = '2.2.1';
   const STORE = { settings: 'rp.settings', level: 'rp.levelState', sessions: 'rp.sessions', vocab: 'rp.vocab', mywords: 'rp.mywords', examples: 'rp.examples' };
   const DEFAULT_MODEL = 'openai/gpt-oss-120b';
   /* Modellen die Groq heeft stopgezet: automatisch vervangen door het standaardmodel. */
@@ -85,7 +85,7 @@
   function updateCorrHint() {
     const v = $('set-corr').value;
     const hints = {
-      zin: 'Bij een fout zegt Camille eerst "On dit plutôt : …" met de juiste zin, en geeft ze daarna haar antwoord.',
+      zin: 'Bij een fout leest de verbeteringsstem meteen de juiste zin voor, zonder inleiding. Daarna geeft Camille haar antwoord.',
       uitleg: nlVoices.length
         ? 'Na de verbeterde zin volgt de korte uitleg met een Nederlandse stem, daarna het antwoord.'
         : 'Geen Nederlandse stem gevonden op dit toestel: alleen de verbeterde zin wordt voorgelezen. Installeer een Nederlandse stem bij Tekst-naar-spraak-uitvoer.',
@@ -835,7 +835,7 @@
     if (token !== loopToken) return;
     /* Correctie hardop: eerst de verbeterde zin (Frans), eventueel de uitleg (Nederlands), dan het antwoord. */
     if (!isMeta && parsed.correctie && settings.speakCorrection !== 'uit') {
-      await speak('On dit plutôt : ' + parsed.correctie, token, 'fr', 'corr');
+      await speak(parsed.correctie, token, 'fr', 'corr');   // meteen de verbeterde zin, zonder inleiding
       if (token !== loopToken) return;
       if (settings.speakCorrection === 'uitleg' && parsed.uitleg && pickNlVoice()) {
         await speak(parsed.uitleg, token, 'nl', 'corr');
@@ -1617,7 +1617,7 @@
       if (!voices.length) { settingsMsg('Geen Franse stem gevonden op dit toestel.', 'warn'); return; }
       const intro = settings.genderMain === 'm' ? 'Bonjour ! Je suis Camille, ton partenaire de conversation.' : 'Bonjour ! Je suis Camille, ta partenaire de conversation.';
       speak(intro + ' On fait un petit tour en français ?', undefined, 'fr', 'main')
-        .then(() => speak('On dit plutôt : je suis allé au marché.', undefined, 'fr', 'corr'));
+        .then(() => speak('Je suis allé au marché.', undefined, 'fr', 'corr'));
     });
 
     $('btn-test-api').addEventListener('click', async () => {

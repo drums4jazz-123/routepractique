@@ -1,4 +1,4 @@
-# RoutePratique – webversie 2.2.0
+# RoutePratique – webversie 2.2.1
 
 Franse gesprekspartner om Frans te spreken, thuis, onderweg of in de auto. Je spreekt, de app toont je zin, een verbeterde versie en het antwoord met de Nederlandse vertaling, en spreekt het antwoord uit. Daarnaast is er een woordentraining in beide richtingen.
 
@@ -123,7 +123,7 @@ Camille is in het Frans een naam voor zowel mannen als vrouwen. Kies je een mann
 
 Bij Instellingen (⚙) kies je bij **Correctie voorlezen** wat er gebeurt als je een fout maakt:
 
-- **Verbeterde zin voorlezen** (standaard): Camille zegt eerst "On dit plutôt : …" met de juiste zin en geeft daarna haar antwoord.
+- **Verbeterde zin voorlezen** (standaard): de verbeteringsstem leest meteen de juiste zin voor, zonder inleidende woorden, en daarna geeft Camille haar antwoord.
 - **Verbeterde zin + uitleg (Nederlands)**: na de verbeterde zin volgt de korte uitleg met een Nederlandse stem. Daarvoor moet een Nederlandse stem geïnstalleerd zijn (Tekst-naar-spraak-uitvoer › Spraakgegevens installeren › Nederlands). Zonder Nederlandse stem wordt de uitleg overgeslagen.
 - **Niet voorlezen**: de verbeterde zin staat alleen op het scherm en in het verslag; Camille verwerkt de juiste vorm dan ongemerkt in haar antwoord.
 
