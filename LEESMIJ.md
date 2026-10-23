@@ -1,4 +1,4 @@
-# RoutePratique – webversie 2.1.3
+# RoutePratique – webversie 2.2.0
 
 Franse gesprekspartner om Frans te spreken, thuis, onderweg of in de auto. Je spreekt, de app toont je zin, een verbeterde versie en het antwoord met de Nederlandse vertaling, en spreekt het antwoord uit. Daarnaast is er een woordentraining in beide richtingen.
 
@@ -31,10 +31,12 @@ Je API-sleutel zit **niet** in de code en komt dus nooit op GitHub terecht.
 
 Bij de eerste start vraagt Chrome toestemming voor de microfoon. Kies "Toestaan".
 
+**Geluid en microfoon.** Gebruik de luidspreker en microfoon van de telefoon, of een bedrade koptelefoon met ingebouwde microfoon. Bluetooth (koptelefoon of auto) wordt niet ondersteund: het omschakelen tussen telefoon- en muziekprofiel doet het begin van Camilles zinnen wegvallen. Zet Bluetooth uit voor je start; ziet de app toch een Bluetooth-apparaat, dan meldt ze dat bij de start.
+
 ## 3. Gebruik
 
 - Kies op het startscherm een thema, een gespreksvorm en een **Situatie**: *Algemeen* (standaard) of *In de auto, ik rij*. In de auto houdt Camille rekening met het verkeer: korte beurten en niets om op het scherm te lezen. In de stand Algemeen veronderstelt ze niet waar je bent.
-- In de auto: koppel de telefoon via Bluetooth en tik op **Start gesprek** vóór je vertrekt.
+- In de auto: leg de telefoon in een houder dicht bij je (luidspreker) of gebruik een bedrade koptelefoon, en tik op **Start gesprek** vóór je vertrekt.
 - Daarna verloopt alles met spraak. Laat de app op het scherm staan; het scherm blijft aan.
 - Gesproken commando's (kort uitspreken):
   - "Répète" of "Pardon ?" – herhaalt het laatste antwoord
@@ -90,8 +92,7 @@ Standaard neemt de app je stem zelf op en laat ze uitschrijven door Whisper bij 
 - Na je zin verschijnt kort "Verwerkt je zin…" (opsturen en uitschrijven, meestal minder dan een seconde).
 - Volgens de documentatie van Groq kan je ongeveer 8 uur spraak per dag laten uitschrijven; elke zin telt minstens 10 seconden mee.
 - Bij ⚙ › Spraakherkenning kan je terug naar "Google in Chrome" (met biepjes). Lukt de eigen opname niet, dan schakelt de app vanzelf over op Google.
-- **Microfoon blijft open.** De microfoon gaat open bij de start en blijft open tot je pauzeert of stopt. Zo hoeft een Bluetooth-koptelefoon niet telkens te wisselen tussen het telefoon- en het muziekprofiel, waardoor eerder het begin van Camilles zinnen wegviel. Na het openen wacht Camille 1,5 s voor ze begint te spreken.
-- **Volume.** Met een open microfoon zet Android de telefoon in "gespreksmodus": het geluid volgt dan het **gespreksvolume**, niet het mediavolume. Dat is een aparte schuif, die Android onthoudt (ook per Bluetooth-koptelefoon). Stel hem één keer in: tik bij Instellingen op **Test stem** (die opent nu ook de microfoon) en druk tijdens het spreken op de volumeknop omhoog. Hetzelfde kan tijdens een sessie, terwijl Camille spreekt. [ONZEKER – nog te testen op de Moto G84 met jouw koptelefoon: of het maximale gespreksvolume even luid is als het mediavolume.]
+- **Volume.** Zolang de microfoon openstaat, zet Android de telefoon in "gespreksmodus" met een zachter gespreksvolume. Daarom gaat de microfoon dicht zodra je uitgesproken bent en weer open als Camille luistert. Camille klinkt zo op het gewone mediavolume, even luid als bij **Test stem**. Klinkt ze toch stil, druk dan op de volumeknop terwijl ze spreekt.
 
 ## Gespreksvorm: wie stelt de vragen?
 
@@ -148,8 +149,8 @@ Vervang de bestanden in de GitHub-repository (Add file › Upload files, of rech
 - Verlaat de app het scherm (ander venster, scherm vergrendeld), dan pauzeert ze. Tik op "Hervat".
 - Met "Google in Chrome" laat Android bij elke luisterbeurt een kort geluidje horen; dat kan een webapp niet uitschakelen. Gebruik daarom de standaard "Eigen opname + Whisper".
 - **Nog te testen op de Moto G84:** hoe goed Whisper losse woorden herkent (korte opnames zijn moeilijker dan zinnen). Op het scherm zie je altijd wat de app verstond.
-- **Nog te testen op de Moto G84:** hoe goed de eigen opname werkt met de microfoon van de auto (Bluetooth) en bij veel rijgeluid. Pikt de balk je stem niet op of ziet hij rijgeluid als spraak, meld het dan.
-- **Nog te testen op de Moto G84:** of Chrome de Bluetooth-microfoon van de auto gebruikt of de microfoon van de telefoon. Werkt de herkenning slecht, leg de telefoon dan dichter bij je of controleer de Bluetooth-instellingen voor "Telefoongesprekken".
+- **Nog te testen op de Moto G84:** hoe goed de eigen opname werkt bij veel rijgeluid met de microfoon van de telefoon in een houder. Pikt de balk je stem niet op of ziet hij rijgeluid als spraak, meld het dan.
+- **Nog te testen op de Moto G84:** of Chrome de naam van een verbonden Bluetooth-apparaat doorgeeft. Zo niet, dan verschijnt de Bluetooth-waarschuwing niet en moet je zelf aan Bluetooth uit denken.
 - Alleen met "Google in Chrome": die herkenning stuurt op Android na elk woord de volledige zin tot dan toe door. De app voegt die stukken samen zonder herhalingen; zie je toch herhalingen in "Jouw zin", meld het met een voorbeeld uit het verslag. Met Whisper (standaard) speelt dit niet.
 - In een gesprek luistert de app in het Frans. Zeg je tussendoor een Nederlands woord, dan wordt dat soms als een Frans klinkend woord uitgeschreven. Vraag het liever in het Frans ("Comment on dit … ?").
 - In de woordentraining wacht de app na een los woord hoogstens 1,5 seconde stilte (ook als je denkpauze langer staat), zodat de training vlot blijft.

@@ -291,7 +291,7 @@
   /* ---------- Eigen opname (Whisper): stilte-detectie, WAV, opschonen ---------- */
 
   /* Stemdetectie op basis van het geluidsniveau (RMS) per audioblok.
-     - settle: eerste ms na het begin negeren (naklank van Camille via Bluetooth)
+     - settle: eerste ms na het begin negeren (naklank van Camille, klik van de microfoon)
      - calib: achtergrondgeluid meten (30e percentiel, robuust als de leerder meteen begint)
      - wait: wachten tot de leerder begint (onbeperkt), met een korte voorloop in het geheugen
      - speech: opnemen tot de stilte langer duurt dan de denkpauze */

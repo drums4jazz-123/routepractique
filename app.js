@@ -2,7 +2,7 @@
 (function () {
   'use strict';
 
-  const VERSION = '2.1.3';
+  const VERSION = '2.2.0';
   const STORE = { settings: 'rp.settings', level: 'rp.levelState', sessions: 'rp.sessions', vocab: 'rp.vocab', mywords: 'rp.mywords', examples: 'rp.examples' };
   const DEFAULT_MODEL = 'openai/gpt-oss-120b';
   /* Modellen die Groq heeft stopgezet: automatisch vervangen door het standaardmodel. */
@@ -146,25 +146,19 @@
   /* Spreekt tekst uit; resolve wanneer klaar. Bewaking via polling omdat onend op Android soms uitblijft.
      lang 'nl' gebruikt een Nederlandse stem (voor de uitleg bij een correctie).
      role 'main' = vragen en antwoorden, 'corr' = verbetering. */
-  /* De microfoon blijft de hele sessie open. Zo hoeft een Bluetooth-koptelefoon niet telkens te wisselen
-     tussen het telefoon- en het muziekprofiel (daarbij viel het begin van Camilles zinnen weg).
-     Gaat de microfoon pas net open (start, hervatten), dan wacht Camille tot Bluetooth omgeschakeld is. */
-  const MIC_SETTLE_MS = 1500;
+  /* De app is bedoeld voor de luidspreker van de telefoon of een bedrade koptelefoon met microfoon.
+     Een open microfoon zet Android in "gespreksmodus" (zachter gespreksvolume). Daarom gaat de microfoon
+     dicht zodra je uitgesproken bent en klinkt Camille op het normale mediavolume, net als bij "Test stem".
+     Na het sluiten een korte adempauze, zodat Android zeker terug in de gewone modus staat. */
+  const MIC_GAP_MS = 300;
   function speak(text, token, lang, role) {
     if (!hasTTS || !text) return Promise.resolve();
-    const cancelled = () => token !== undefined && token !== loopToken;
-    if (sess && useWhisper() && !mic) {
-      return ensureMic().then(() => settleMic(), () => {})
-        .then(() => cancelled() ? undefined : speakNow(text, token, lang, role));
-    }
-    if (mic && Date.now() - micOpenedAt < MIC_SETTLE_MS) {
-      return settleMic().then(() => cancelled() ? undefined : speakNow(text, token, lang, role));
+    if (mic) releaseMic();
+    const left = MIC_GAP_MS - (Date.now() - micClosedAt);
+    if (micClosedAt && left > 0) {
+      return sleep(left).then(() => (token !== undefined && token !== loopToken) ? undefined : speakNow(text, token, lang, role));
     }
     return speakNow(text, token, lang, role);
-  }
-  function settleMic() {
-    const left = MIC_SETTLE_MS - (Date.now() - micOpenedAt);
-    return left > 0 ? sleep(left) : Promise.resolve();
   }
 
   function speakNow(text, token, lang, role) {
@@ -375,13 +369,13 @@
     // Eerste spraakuitvoer moet uit een tik komen: kort leeg fragment ontgrendelt TTS op Android.
     if (hasTTS) { const u = new SpeechSynthesisUtterance(' '); u.volume = 0; speechSynthesis.speak(u); }
     whisperBroken = false;                           // bij elke sessie de eigen opname opnieuw proberen
-    if (useWhisper()) ensureMic().catch(() => {});   // microfoontoestemming meteen bij de start vragen
+    if (useWhisper()) { const sid = sess.id; ensureMic().then(() => warnBluetooth(sid)).catch(() => {}); }   // toestemming meteen vragen
     loopToken++;
     if (sess.mode === 'vocab') vocabIntro(loopToken);
     else askModel('[START]', null, loopToken);
   }
 
-  let micOpenedAt = 0;      // tijdstip waarop de microfoon openging (Bluetooth heeft even tijd nodig om om te schakelen)
+  let micClosedAt = 0;      // tijdstip waarop de microfoon het laatst dichtging
 
   function stopRecognition() {
     vad = null;
@@ -390,6 +384,7 @@
     if (rec) {
       try { rec.onend = null; rec.onresult = null; rec.onerror = null; rec.abort(); } catch (e) { /* negeren */ }
       rec = null;
+      micClosedAt = Date.now();
     }
   }
 
@@ -518,16 +513,29 @@
       src.connect(proc); proc.connect(sink); sink.connect(ctx.destination);
       proc.onaudioprocess = e => onAudioFrame(e.inputBuffer.getChannelData(0));
       mic = { ctx, stream, src, proc, sink, rate: ctx.sampleRate };
-      micOpenedAt = Date.now();
       return mic;
     })();
     return micPromise.finally(() => { micPromise = null; });
+  }
+
+  /* De app ondersteunt geen Bluetooth. Chrome toont na de microfoontoestemming de namen van de
+     audio-apparaten; staat daar een Bluetooth-apparaat bij, dan volgt één waarschuwing per sessie. */
+  async function warnBluetooth(sessId) {
+    try {
+      if (!navigator.mediaDevices.enumerateDevices) return;
+      const devs = await navigator.mediaDevices.enumerateDevices();
+      const bt = devs.some(d => (d.kind === 'audioinput' || d.kind === 'audiooutput') && /bluetooth|\bbt\b|\bsco\b|hands-?free/i.test(d.label || ''));
+      if (bt && sess && sess.id === sessId) {
+        addSys('Er lijkt een Bluetooth-apparaat verbonden. De app werkt alleen goed via de telefoon of een bedrade koptelefoon: zet Bluetooth uit en start opnieuw.');
+      }
+    } catch (e) { /* negeren */ }
   }
 
   function releaseMic() {
     vad = null;
     if (!mic) return;
     const m = mic; mic = null;
+    micClosedAt = Date.now();
     try { m.proc.onaudioprocess = null; m.src.disconnect(); m.proc.disconnect(); m.sink.disconnect(); } catch (e) { /* negeren */ }
     try { m.stream.getTracks().forEach(t => t.stop()); } catch (e) { /* negeren */ }
     try { m.ctx.close(); } catch (e) { /* negeren */ }
@@ -570,6 +578,7 @@
     } else if (ev.type === 'end') {
       vad = null;
       meter(0, 1);
+      releaseMic();                      // tijdens het verwerken en het antwoord blijft de microfoon dicht
       processRecording(ev.samples, v.rate, v.token);
     }
   }
@@ -1603,30 +1612,12 @@
       show('home');
     });
 
-    /* De stemtest gebeurt met open microfoon, net als tijdens een sessie: zo hoor je hetzelfde volume
-       en kun je het meteen instellen met de volumeknoppen (Android onthoudt dat gespreksvolume). */
-    let voiceTesting = false;
-    $('btn-test-voice').addEventListener('click', async () => {
+    $('btn-test-voice').addEventListener('click', () => {
       readSettingsForm();
       if (!voices.length) { settingsMsg('Geen Franse stem gevonden op dit toestel.', 'warn'); return; }
-      if (voiceTesting || sess) return;
-      voiceTesting = true;
       const intro = settings.genderMain === 'm' ? 'Bonjour ! Je suis Camille, ton partenaire de conversation.' : 'Bonjour ! Je suis Camille, ta partenaire de conversation.';
-      let opened = false;
-      if (canWhisper()) {
-        settingsMsg('Microfoon openen…');
-        try { await ensureMic(); opened = true; await settleMic(); } catch (e) { /* zonder microfoon testen */ }
-      }
-      settingsMsg(opened
-        ? 'Zo klinkt Camille tijdens een sessie. Druk nu op de volumeknop omhoog om het volume in te stellen.'
-        : 'Microfoon niet beschikbaar: de test klinkt mogelijk luider dan tijdens een sessie.', opened ? 'ok' : 'warn');
-      try {
-        await speak(intro + ' On fait un petit tour en français ? Je parle encore un peu, pour que tu puisses régler le volume.', undefined, 'fr', 'main');
-        await speak('On dit plutôt : je suis allé au marché.', undefined, 'fr', 'corr');
-      } finally {
-        if (opened && !sess) releaseMic();
-        voiceTesting = false;
-      }
+      speak(intro + ' On fait un petit tour en français ?', undefined, 'fr', 'main')
+        .then(() => speak('On dit plutôt : je suis allé au marché.', undefined, 'fr', 'corr'));
     });
 
     $('btn-test-api').addEventListener('click', async () => {
