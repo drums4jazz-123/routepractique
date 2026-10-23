@@ -2,7 +2,7 @@
 (function () {
   'use strict';
 
-  const VERSION = '2.1.0';
+  const VERSION = '2.1.1';
   const STORE = { settings: 'rp.settings', level: 'rp.levelState', sessions: 'rp.sessions', vocab: 'rp.vocab', mywords: 'rp.mywords', examples: 'rp.examples' };
   const DEFAULT_MODEL = 'openai/gpt-oss-120b';
   /* Modellen die Groq heeft stopgezet: automatisch vervangen door het standaardmodel. */
@@ -27,6 +27,7 @@
     vocabExamples: true,      // voorbeeldzin na elk woord
     collectWords: true,       // woorden uit gesprekken toevoegen aan de woordentraining
     sttEngine: 'whisper',     // 'whisper' (eigen opname, geen biepjes) | 'chrome'
+    micOffWhileSpeaking: true, // microfoon dicht terwijl Camille spreekt (normaal volume)
     whisperModel: 'whisper-large-v3-turbo',
     voiceGenderDevice: 'f',   // hoe de Franse standaardstem van het toestel klinkt
     genderMain: 'f',          // stem voor vragen en antwoorden
@@ -144,7 +145,18 @@
   /* Spreekt tekst uit; resolve wanneer klaar. Bewaking via polling omdat onend op Android soms uitblijft.
      lang 'nl' gebruikt een Nederlandse stem (voor de uitleg bij een correctie).
      role 'main' = vragen en antwoorden, 'corr' = verbetering. */
+  /* Een open microfoon zet Android in "gespreksmodus": de stem gaat dan via het (zachtere) gesprekskanaal,
+     en via Bluetooth via het telefoonprofiel. Daarom gaat de microfoon dicht zolang Camille spreekt;
+     bij het luisteren gaat hij weer open (zonder nieuwe toestemming). */
   function speak(text, token, lang, role) {
+    if (mic && settings.micOffWhileSpeaking !== false && hasTTS && text) {
+      releaseMic();
+      return sleep(300).then(() => (token !== undefined && token !== loopToken) ? undefined : speakNow(text, token, lang, role));
+    }
+    return speakNow(text, token, lang, role);
+  }
+
+  function speakNow(text, token, lang, role) {
     return new Promise(resolve => {
       if (!hasTTS || !text) return resolve();
       speechSynthesis.cancel();
@@ -480,7 +492,9 @@
     if (micPromise) return micPromise;
     micPromise = (async () => {
       const stream = await navigator.mediaDevices.getUserMedia({
-        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1 }
+        /* Geen echo-onderdrukking: de app luistert nooit terwijl Camille spreekt, en echo-onderdrukking
+           zet Android in gespreksmodus (zachter volume). */
+        audio: { echoCancellation: false, noiseSuppression: true, autoGainControl: true, channelCount: 1 }
       });
       const AC = window.AudioContext || window.webkitAudioContext;
       const ctx = new AC();
@@ -1478,6 +1492,7 @@
     $('set-gender-main').value = settings.genderMain === 'm' ? 'm' : 'f';
     $('set-gender-corr').value = settings.genderCorr === 'f' ? 'f' : 'm';
     $('set-stt').value = settings.sttEngine === 'chrome' ? 'chrome' : 'whisper';
+    $('set-micoff').checked = settings.micOffWhileSpeaking !== false;
     $('set-humor').value = RP.HUMOR_LEVELS.includes(settings.humor) ? settings.humor : 'afentoe';
     $('set-translate').checked = settings.showTranslation !== false;
     $('set-vsyn').checked = settings.vocabSynonyms !== false;
@@ -1510,6 +1525,7 @@
     settings.genderMain = g('set-gender-main');
     settings.genderCorr = g('set-gender-corr');
     settings.sttEngine = $('set-stt').value === 'chrome' ? 'chrome' : 'whisper';
+    settings.micOffWhileSpeaking = $('set-micoff').checked;
     settings.humor = RP.HUMOR_LEVELS.includes($('set-humor').value) ? $('set-humor').value : 'afentoe';
     settings.showTranslation = $('set-translate').checked;
     settings.vocabSynonyms = $('set-vsyn').checked;
